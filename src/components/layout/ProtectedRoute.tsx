@@ -1,0 +1,22 @@
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
+import { LoadingState } from '@/components/ui/LoadingState'
+
+export function ProtectedRoute() {
+  const { isAuthenticated, isLoading } = useAuth()
+  const location = useLocation()
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-[var(--background)]">
+        <LoadingState label="Checking session…" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  return <Outlet />
+}

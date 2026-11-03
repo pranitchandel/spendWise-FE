@@ -1,0 +1,49 @@
+import { api, unwrap } from './client'
+import type { LendingRecord, Paginated, PaymentMode, Repayment } from '@/types'
+
+export interface LendingInput {
+  type: 'LENDING'
+  personName: string
+  phone?: string
+  email?: string
+  personId?: string | null
+  amount: number
+  transactionDate: string
+  accountId: string
+  paymentMode: PaymentMode
+  categoryId: string
+  expectedRepaymentDate?: string | null
+  interestRate?: number | null
+  description?: string
+  notes?: string
+}
+
+export interface RepaymentInput {
+  amount: number
+  interestAmount?: number
+  accountId: string
+  paymentMode: PaymentMode
+  transactionDate: string
+  categoryId: string
+  note?: string
+}
+
+export const lendingApi = {
+  list(params?: { status?: string; page?: number; limit?: number }) {
+    return unwrap<LendingRecord[] | Paginated<LendingRecord>>(api.get('/lending', { params })).then(
+      (data) => (Array.isArray(data) ? data : data.items),
+    )
+  },
+
+  get(id: string) {
+    return unwrap<LendingRecord & { repayments?: Repayment[] }>(api.get(`/lending/${id}`))
+  },
+
+  create(input: LendingInput) {
+    return unwrap<LendingRecord>(api.post('/lending', input))
+  },
+
+  addRepayment(id: string, input: RepaymentInput) {
+    return unwrap<Repayment>(api.post(`/lending/${id}/repayments`, input))
+  },
+}
