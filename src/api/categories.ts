@@ -26,4 +26,8 @@ export const categoriesApi = {
   remove(id: string) {
     return unwrap<{ id: string } | void>(api.delete(`/categories/${id}`))
   },
+  
+  permanentlyDelete(id: string) {
+    return unwrap<{ id: string }>(api.delete(`/categories/${id}/permanent`))
+  },
 }

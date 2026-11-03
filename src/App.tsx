@@ -10,6 +10,7 @@ import { SettingsPage } from '@/pages/settings/SettingsPage'
 import { StatisticsPage } from '@/pages/StatisticsPage'
 import { RecurringPage } from '@/pages/recurring/RecurringPage'
 import { TransactionsPage } from '@/pages/transactions/TransactionsPage'
+import { CategoriesPage } from '@/pages/settings/CategoriesPage'
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="borrowing" element={<LendingBorrowingPage />} />
           <Route path="statistics" element={<StatisticsPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="settings/categories" element={<CategoriesPage />} />
           <Route path="recurring" element={<RecurringPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>

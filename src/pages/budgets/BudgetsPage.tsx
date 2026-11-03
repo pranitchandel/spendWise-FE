@@ -41,6 +41,11 @@ export function BudgetsPage() {
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
   })
+  const spendingQuery = useQuery({
+    queryKey: ['budget-spending', year, monthNumber],
+    queryFn: () => budgetsApi.getMonthlySpendingByCategory(year, monthNumber),
+    refetchOnWindowFocus: true,
+  })
   const form = useForm<BudgetForm>({ resolver: zodResolver(budgetSchema), defaultValues: { amounts: {} } })
   const budget = budgetQuery.data
 
@@ -71,8 +76,8 @@ export function BudgetsPage() {
     onError: (error) => showToast(getErrorMessage(error), 'error'),
   })
 
-  if (categoriesQuery.isLoading || budgetQuery.isLoading) return <LoadingState label="Loading budgets…" />
-  if (categoriesQuery.isError || budgetQuery.isError || !categoriesQuery.data) return <div role="alert" className="text-sm text-[var(--danger)]">Budget data couldn’t be loaded.</div>
+  if (categoriesQuery.isLoading || budgetQuery.isLoading || spendingQuery.isLoading) return <LoadingState label="Loading budgets…" />
+  if (categoriesQuery.isError || budgetQuery.isError || spendingQuery.isError || !categoriesQuery.data || !spendingQuery.data) return <div role="alert" className="text-sm text-[var(--danger)]">Budget data couldn’t be loaded.</div>
 
   function submit(values: BudgetForm) {
     setPageError('')
@@ -107,6 +112,50 @@ export function BudgetsPage() {
         <div><p className="text-xs text-[var(--secondary)]">Remaining</p><p className="mt-1 text-lg font-semibold">{currency.format(budget.summary.remaining)}</p></div>
         <div><p className="text-xs text-[var(--secondary)]">Utilization</p><p className="mt-1 text-lg font-semibold">{budget.summary.utilizationPercent}%</p><Progress value={budget.summary.utilizationPercent} className="mt-2" /></div>
       </Card> : <p className="text-sm text-[var(--secondary)]">No budget is configured for {formatMonthYear(year, monthNumber)}.</p>}
+
+      <section className="space-y-3" aria-label="Spending by category">
+        <div>
+          <h3 className="font-semibold">Spending by category</h3>
+          <p className="mt-1 text-xs text-[var(--secondary)]">Expense activity for {formatMonthYear(year, monthNumber)}, including categories without a budget.</p>
+        </div>
+        {spendingQuery.data.length ? (
+          <Card className="divide-y divide-[var(--border)] overflow-hidden p-0">
+            {spendingQuery.data.map((spending) => {
+              const budgetItem = budget?.items.find((item) => item.categoryId === spending.categoryId)
+              const highestSpend = spendingQuery.data[0]?.actualSpent ?? 0
+              const barPercent = budgetItem
+                ? Math.max(0, Math.min(budgetItem.utilizationPercent, 100))
+                : highestSpend > 0 ? Math.max(0, Math.min((spending.actualSpent / highestSpend) * 100, 100)) : 0
+              return (
+                <div key={spending.categoryId} className="px-4 py-3 sm:px-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: spending.color }} aria-hidden="true" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{spending.categoryName}{spending.isArchived ? ' · Archived' : ''}</p>
+                        <p className="mt-0.5 text-xs text-[var(--secondary)]">{spending.transactionCount} {spending.transactionCount === 1 ? 'expense' : 'expenses'}{budgetItem ? ` · ${budgetItem.utilizationPercent}% of budget` : ' · Relative to highest category'}</p>
+                      </div>
+                    </div>
+                    <p className="shrink-0 text-sm font-semibold tabular-nums">{currency.format(spending.actualSpent)}</p>
+                  </div>
+                  <div
+                    className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--muted)]"
+                    role="progressbar"
+                    aria-label={`${spending.categoryName} spending${budgetItem ? ' budget usage' : ' relative to highest category'}`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(barPercent)}
+                  >
+                    <div className="h-full rounded-full transition-all" style={{ width: `${barPercent}%`, backgroundColor: spending.color }} />
+                  </div>
+                </div>
+              )
+            })}
+          </Card>
+        ) : (
+          <Card className="p-6 text-center text-sm text-[var(--secondary)]">No expense activity for this month.</Card>
+        )}
+      </section>
 
       <Modal open={addForm.isOpen} onClose={addForm.close} title="Category limits" className="sm:max-w-3xl">
         <p className="mb-4 text-xs text-[var(--secondary)]">Each month has independent limits; actual spending comes from expense and refund transactions.</p>

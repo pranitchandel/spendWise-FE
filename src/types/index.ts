@@ -166,6 +166,16 @@ export interface BudgetItem {
   projectedMonthEnd: number
 }
 
+export interface MonthlyCategorySpending {
+  categoryId: string
+  categoryName: string
+  icon: string
+  color: string
+  isArchived: boolean
+  actualSpent: number
+  transactionCount: number
+}
+
 export interface MonthlyBudget {
   id: string
   year: number

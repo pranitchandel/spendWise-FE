@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Repeat,
   Settings,
+  Tags,
   Wallet,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
@@ -20,6 +21,7 @@ const links = [
   { to: '/accounts', label: 'Accounts', icon: CreditCard },
   { to: '/recurring', label: 'Recurring', icon: Repeat },
   { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/settings/categories', label: 'Categories', icon: Tags },
 ]
 
 export function Sidebar({ mobile = false }: { mobile?: boolean }) {
@@ -46,6 +48,7 @@ export function Sidebar({ mobile = false }: { mobile?: boolean }) {
           <NavLink
             key={to}
             to={to}
+            end={to === '/settings'}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',

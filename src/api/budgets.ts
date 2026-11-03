@@ -1,5 +1,5 @@
 import { api, unwrap } from './client'
-import type { MonthlyBudget } from '@/types'
+import type { MonthlyBudget, MonthlyCategorySpending } from '@/types'
 
 export interface BudgetItemInput {
   categoryId: string
@@ -21,6 +21,10 @@ export const budgetsApi = {
 
   getMonth(year: number, month: number) {
     return unwrap<MonthlyBudget>(api.get(`/budgets/${year}/${month}`))
+  },
+
+  getMonthlySpendingByCategory(year: number, month: number) {
+    return unwrap<MonthlyCategorySpending[]>(api.get(`/budgets/${year}/${month}/actuals`))
   },
 
   create(input: BudgetInput) {
