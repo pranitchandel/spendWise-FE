@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, EllipsisVertical, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -95,16 +95,29 @@ function transactionIconBackground(type: TransactionType) {
 
 export function TransactionsPage() {
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
   const [type, setType] = useState<TransactionType | ''>('')
   const [searchParams, setSearchParams] = useSearchParams()
   const addOpen = searchParams.get('add') === '1'
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null)
+  const [mobileActionsId, setMobileActionsId] = useState<string | null>(null)
   const queryClient = useQueryClient()
   const { showToast } = useToast()
+  useEffect(() => {
+    const normalizedSearch = search.trim()
+    if (!normalizedSearch) {
+      setDebouncedSearch('')
+      return
+    }
+
+    const timeout = window.setTimeout(() => setDebouncedSearch(normalizedSearch), 500)
+    return () => window.clearTimeout(timeout)
+  }, [search])
+
   const transactionsQuery = useQuery({
-    queryKey: ['transactions', search, type],
-    queryFn: () => transactionsApi.list({ page: 1, limit: 100, search, type }),
+    queryKey: ['transactions', debouncedSearch, type],
+    queryFn: () => transactionsApi.list({ page: 1, limit: 100, search: debouncedSearch, type }),
   })
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: () => accountsApi.list() })
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: () => categoriesApi.list({ includeArchived: true }) })
@@ -165,16 +178,68 @@ export function TransactionsPage() {
           <div className="mb-2 flex items-center justify-between px-1"><h3 className="text-sm font-semibold">{formatDate(date)}</h3><span className="text-xs text-[var(--secondary)]">{items.length} {items.length === 1 ? 'entry' : 'entries'}</span></div>
           <Card className="divide-y divide-[var(--border)] overflow-hidden">
             {items.map((transaction) => (
-              <article key={transaction.id} className="flex items-center gap-3 px-4 py-4 sm:px-5">
-                <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${transactionIconBackground(transaction.type)} ${transactionColor(transaction.type)}`}>
-                  {isCredit(transaction.type) ? <ArrowDownLeft className="h-4 w-4" /> : transaction.type === 'TRANSFER' ? <ArrowLeftRight className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+              <article key={transaction.id} className="relative">
+                <div className="flex align-items-start gap-2 px-3 py-3 md:hidden">
+                  <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${transactionIconBackground(transaction.type)} ${transactionColor(transaction.type)}`}>
+                    {isCredit(transaction.type) ? <ArrowDownLeft className="h-4 w-4" /> : transaction.type === 'TRANSFER' ? <ArrowLeftRight className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-sm font-semibold leading-5">{transaction.description || transaction.type.replaceAll('_', ' ').toLowerCase()}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className={`text-[13px] font-semibold tabular-nums ${transactionColor(transaction.type)}`}>{isCredit(transaction.type) ? '+' : transaction.type === 'TRANSFER' ? '' : '−'}{money.format(transaction.amount)}</p>
+                    <p className="mt-0.5 text-[10px] font-semibold uppercase text-[var(--secondary)]">{transaction.type.replaceAll('_', ' ')}</p>
+                  </div>
+                  <div className="relative shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-10 w-9"
+                      aria-label={`Actions for ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`}
+                      aria-expanded={mobileActionsId === transaction.id}
+                      aria-haspopup="menu"
+                      onClick={() => setMobileActionsId((current) => current === transaction.id ? null : transaction.id)}
+                    >
+                      <EllipsisVertical className="h-5 w-5" />
+                    </Button>
+                    {mobileActionsId === transaction.id ? (
+                      <div role="menu" className="absolute right-0 top-full z-20 mt-1 flex w-40 flex-col rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-xl">
+                        <Button role="menuitem" variant="ghost" className="min-h-11 justify-start" onClick={() => { setEditingTransaction(transaction); setMobileActionsId(null) }}><Pencil className="h-4 w-4" />Edit</Button>
+                        <Button role="menuitem" variant="ghost" className="min-h-11 justify-start text-[var(--danger)]" disabled={deleteMutation.isPending} onClick={() => { setTransactionToDelete(transaction); setMobileActionsId(null) }}><Trash2 className="h-4 w-4" />Delete</Button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{transaction.description || transaction.type.replaceAll('_', ' ').toLowerCase()}</p><p className="mt-1 truncate text-xs text-[var(--secondary)]">{categoryNames.get(transaction.categoryId) ?? 'Uncategorized'} · {accountNames.get(transaction.accountId) ?? 'Account'} · {transaction.paymentMode.replaceAll('_', ' ')}</p></div>
-                <div className="shrink-0 text-right"><p className={`text-sm font-semibold tabular-nums ${transactionColor(transaction.type)}`}>{isCredit(transaction.type) ? '+' : transaction.type === 'TRANSFER' ? '' : '−'}{money.format(transaction.amount)}</p><p className="mt-1 text-[10px] font-semibold uppercase text-[var(--secondary)]">{transaction.type.replaceAll('_', ' ')}</p></div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button variant="ghost" size="icon" aria-label={`Edit ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`} onClick={() => setEditingTransaction(transaction)}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" aria-label={`Delete ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`} disabled={deleteMutation.isPending} onClick={() => setTransactionToDelete(transaction)}><Trash2 className="h-4 w-4 text-[var(--danger)]" /></Button>
+                <div className="ml-14 flex flex-col items-start gap-1.5 pb-3 pr-12 md:hidden">
+                  <span className="max-w-full break-words rounded-md bg-[var(--muted)] py-1 text-xs font-medium leading-4 text-[var(--foreground)]">
+                    {categoryNames.get(transaction.categoryId) ?? 'Uncategorized'}
+                  </span>
+                  {transaction.type === 'TRANSFER' ? (
+                    <p className="flex max-w-full flex-wrap items-center gap-x-1 break-words text-xs leading-4 text-[var(--secondary)]">
+                      <span>{accountNames.get(transaction.accountId) ?? 'Account'}</span>
+                      <ArrowRight className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      <span>{transaction.toAccountId ? accountNames.get(transaction.toAccountId) ?? 'Account' : 'Account'}</span>
+                    </p>
+                  ) : (
+                    <p className="break-words text-xs leading-4 text-[var(--secondary)]">{accountNames.get(transaction.accountId) ?? 'Account'}</p>
+                  )}
+                  <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[11px] leading-4 text-[var(--secondary)]">
+                    {transaction.paymentMode.replaceAll('_', ' ')}
+                  </span>
                 </div>
+
+                <div className="flex items-center gap-3 px-4 py-4 sm:px-5 max-md:hidden">
+                  <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${transactionIconBackground(transaction.type)} ${transactionColor(transaction.type)}`}>
+                    {isCredit(transaction.type) ? <ArrowDownLeft className="h-4 w-4" /> : transaction.type === 'TRANSFER' ? <ArrowLeftRight className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+                  </div>
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{transaction.description || transaction.type.replaceAll('_', ' ').toLowerCase()}</p><p className="mt-1 truncate text-xs text-[var(--secondary)]">{categoryNames.get(transaction.categoryId) ?? 'Uncategorized'} · {accountNames.get(transaction.accountId) ?? 'Account'} · {transaction.paymentMode.replaceAll('_', ' ')}</p></div>
+                  <div className="shrink-0 text-right"><p className={`text-sm font-semibold tabular-nums ${transactionColor(transaction.type)}`}>{isCredit(transaction.type) ? '+' : transaction.type === 'TRANSFER' ? '' : '−'}{money.format(transaction.amount)}</p><p className="mt-1 text-[10px] font-semibold uppercase text-[var(--secondary)]">{transaction.type.replaceAll('_', ' ')}</p></div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button variant="ghost" size="icon" aria-label={`Edit ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`} onClick={() => setEditingTransaction(transaction)}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" aria-label={`Delete ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`} disabled={deleteMutation.isPending} onClick={() => setTransactionToDelete(transaction)}><Trash2 className="h-4 w-4 text-[var(--danger)]" /></Button>
+                  </div>
+                </div>
+
               </article>
             ))}
           </Card>

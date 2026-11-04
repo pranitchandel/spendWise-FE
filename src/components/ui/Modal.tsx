@@ -32,7 +32,7 @@ export function Modal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
       <button
         type="button"
         aria-label="Close dialog"
@@ -43,10 +43,11 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         className={cn(
-          'relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl sm:max-w-lg sm:rounded-2xl',
+          'relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl border border-b-0 border-[var(--border)] bg-[var(--card)] px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-3 shadow-xl sm:max-h-[90vh] sm:rounded-2xl sm:border-b sm:p-6 sm:max-w-lg',
           className,
         )}
       >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--secondary)]/40 sm:hidden" aria-hidden="true" />
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">{title}</h2>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
