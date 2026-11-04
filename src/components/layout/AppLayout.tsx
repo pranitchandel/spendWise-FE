@@ -15,6 +15,7 @@ const titles: Record<string, string> = {
   '/statistics': 'Statistics',
   '/accounts': 'Accounts',
   '/recurring': 'Recurring',
+  '/planned-expenses': 'Planned expenses',
   '/settings': 'Settings',
   '/settings/categories': 'Categories',
   '/settings/profile': 'Profile',
@@ -35,7 +36,7 @@ export function AppLayout() {
   const addTarget =
     location.pathname === '/dashboard' || location.pathname === '/transactions'
       ? '/transactions?add=1'
-      : ['/accounts', '/budgets', '/lending', '/borrowing', '/recurring'].includes(location.pathname)
+      : ['/accounts', '/budgets', '/lending', '/borrowing', '/recurring', '/planned-expenses'].includes(location.pathname)
         ? `${location.pathname}?add=1`
         : null
   const hideFab = !addTarget || location.pathname.startsWith('/transactions/new')
@@ -66,6 +67,8 @@ export function AppLayout() {
                 ? 'Add category budget'
                 : location.pathname === '/recurring'
                   ? 'Add recurring schedule'
+                  : location.pathname === '/planned-expenses'
+                    ? 'Add planned expense'
                   : location.pathname === '/lending' || location.pathname === '/borrowing'
                     ? 'Add lending or borrowing record'
                     : 'Add transaction'

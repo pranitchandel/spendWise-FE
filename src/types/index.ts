@@ -146,6 +146,9 @@ export interface Transaction {
   linkedRecordId?: string | null
   linkedRecordType?: 'LENDING' | 'BORROWING' | null
   linkedTransactionId?: string | null
+  plannedExpenseId?: string | null
+  plannedExpenseItemId?: string | null
+  plannedExpenseStatus?: 'PLANNED' | 'COMPLETED' | 'CANCELLED' | null
   interest?: number
   isCreditCardBillPayment?: boolean
   createdAt: string
@@ -282,6 +285,51 @@ export interface RecurringRule {
   nextDueDate?: string | null
   toAccountId?: string | null
   occurrences?: RecurringOccurrence[]
+  createdAt: string
+  updatedAt: string
+}
+
+export type PlannedExpenseStatus = 'PLANNED' | 'COMPLETED' | 'CANCELLED'
+
+export interface PlannedExpenseTransaction {
+  id: string
+  amount: number
+  date: string
+  accountId: string
+  paymentMode: PaymentMode
+  description: string
+  note: string
+  refundedAmount: number
+}
+
+export interface PlannedExpenseItem {
+  id: string
+  name: string
+  categoryId: string | null
+  categoryName: string | null
+  estimatedAmount: number
+  spentAmount: number
+  remainingAmount: number
+  overBudgetAmount: number
+  spendingPercent: number
+  transactions: PlannedExpenseTransaction[]
+}
+
+export interface PlannedExpense {
+  id: string
+  name: string
+  dueDate: string | null
+  status: PlannedExpenseStatus
+  notes: string
+  items: PlannedExpenseItem[]
+  summary: {
+    estimatedAmount: number
+    spentAmount: number
+    remainingAmount: number
+    overBudgetAmount: number
+    spendingPercent: number
+    transactionCount: number
+  }
   createdAt: string
   updatedAt: string
 }

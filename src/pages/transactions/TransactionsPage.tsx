@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, EllipsisVertical, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, EllipsisVertical, Flag, LockKeyhole, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -71,6 +71,35 @@ function currentISTDate() {
 
 function isCredit(type: TransactionType) {
   return type === 'INCOME' || type === 'BORROWING' || type === 'LENDING_REPAYMENT' || type === 'REFUND'
+}
+
+function campaignLocksTransaction(transaction: Transaction) {
+  return transaction.plannedExpenseStatus === 'COMPLETED' || transaction.plannedExpenseStatus === 'CANCELLED'
+}
+
+function isCampaignTransaction(transaction: Transaction) {
+  return Boolean(transaction.plannedExpenseId || transaction.plannedExpenseStatus)
+}
+
+function campaignStatusLabel(transaction: Transaction) {
+  if (transaction.plannedExpenseStatus === 'COMPLETED') return 'Campaign · Completed'
+  if (transaction.plannedExpenseStatus === 'CANCELLED') return 'Campaign · Cancelled'
+  return isCampaignTransaction(transaction) ? 'Campaign' : null
+}
+
+function CampaignTransactionBadge({ transaction }: { transaction: Transaction }) {
+  if (!isCampaignTransaction(transaction)) return null
+  const Icon = campaignLocksTransaction(transaction) ? LockKeyhole : Flag
+  const statusColor = transaction.plannedExpenseStatus === 'COMPLETED'
+    ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-950/40 dark:text-green-400'
+    : transaction.plannedExpenseStatus === 'CANCELLED'
+      ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400'
+      : 'border-[var(--border)] bg-[var(--muted)] text-[var(--secondary)]'
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium leading-4 ${statusColor}`}>
+      <Icon className="h-3 w-3" />{campaignStatusLabel(transaction)}
+    </span>
+  )
 }
 
 function transactionColor(type: TransactionType) {
@@ -190,7 +219,7 @@ export function TransactionsPage() {
                     <p className={`text-[13px] font-semibold tabular-nums ${transactionColor(transaction.type)}`}>{isCredit(transaction.type) ? '+' : transaction.type === 'TRANSFER' ? '' : '−'}{money.format(transaction.amount)}</p>
                     <p className="mt-0.5 text-[10px] font-semibold uppercase text-[var(--secondary)]">{transaction.type.replaceAll('_', ' ')}</p>
                   </div>
-                  <div className="relative shrink-0">
+                  {!campaignLocksTransaction(transaction) ? <div className="relative shrink-0">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -208,7 +237,7 @@ export function TransactionsPage() {
                         <Button role="menuitem" variant="ghost" className="min-h-11 justify-start text-[var(--danger)]" disabled={deleteMutation.isPending} onClick={() => { setTransactionToDelete(transaction); setMobileActionsId(null) }}><Trash2 className="h-4 w-4" />Delete</Button>
                       </div>
                     ) : null}
-                  </div>
+                  </div> : null}
                 </div>
                 <div className="ml-14 flex flex-col items-start gap-1.5 pb-3 pr-12 md:hidden">
                   <span className="max-w-full break-words rounded-md bg-[var(--muted)] py-1 text-xs font-medium leading-4 text-[var(--foreground)]">
@@ -223,21 +252,24 @@ export function TransactionsPage() {
                   ) : (
                     <p className="break-words text-xs leading-4 text-[var(--secondary)]">{accountNames.get(transaction.accountId) ?? 'Account'}</p>
                   )}
-                  <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[11px] leading-4 text-[var(--secondary)]">
-                    {transaction.paymentMode.replaceAll('_', ' ')}
-                  </span>
+                  <div className="flex max-w-full flex-wrap items-center gap-1.5">
+                    <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[11px] leading-4 text-[var(--secondary)]">
+                      {transaction.paymentMode.replaceAll('_', ' ')}
+                    </span>
+                    <CampaignTransactionBadge transaction={transaction} />
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-3 px-4 py-4 sm:px-5 max-md:hidden">
                   <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${transactionIconBackground(transaction.type)} ${transactionColor(transaction.type)}`}>
                     {isCredit(transaction.type) ? <ArrowDownLeft className="h-4 w-4" /> : transaction.type === 'TRANSFER' ? <ArrowLeftRight className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
                   </div>
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{transaction.description || transaction.type.replaceAll('_', ' ').toLowerCase()}</p><p className="mt-1 truncate text-xs text-[var(--secondary)]">{categoryNames.get(transaction.categoryId) ?? 'Uncategorized'} · {accountNames.get(transaction.accountId) ?? 'Account'} · {transaction.paymentMode.replaceAll('_', ' ')}</p></div>
+                  <div className="flex min-w-0 flex-1 flex-col items-start"><p className="max-w-full truncate text-sm font-medium">{transaction.description || transaction.type.replaceAll('_', ' ').toLowerCase()}</p><div className="mt-1 flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1"><p className="min-w-0 truncate text-xs text-[var(--secondary)]">{categoryNames.get(transaction.categoryId) ?? 'Uncategorized'} · {accountNames.get(transaction.accountId) ?? 'Account'} · {transaction.paymentMode.replaceAll('_', ' ')}</p><CampaignTransactionBadge transaction={transaction} /></div></div>
                   <div className="shrink-0 text-right"><p className={`text-sm font-semibold tabular-nums ${transactionColor(transaction.type)}`}>{isCredit(transaction.type) ? '+' : transaction.type === 'TRANSFER' ? '' : '−'}{money.format(transaction.amount)}</p><p className="mt-1 text-[10px] font-semibold uppercase text-[var(--secondary)]">{transaction.type.replaceAll('_', ' ')}</p></div>
-                  <div className="flex shrink-0 items-center gap-1">
+                  {!campaignLocksTransaction(transaction) ? <div className="flex shrink-0 items-center gap-1">
                     <Button variant="ghost" size="icon" aria-label={`Edit ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`} onClick={() => setEditingTransaction(transaction)}><Pencil className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" aria-label={`Delete ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`} disabled={deleteMutation.isPending} onClick={() => setTransactionToDelete(transaction)}><Trash2 className="h-4 w-4 text-[var(--danger)]" /></Button>
-                  </div>
+                  </div> : null}
                 </div>
 
               </article>

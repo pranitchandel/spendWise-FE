@@ -36,11 +36,20 @@ export const lendingApi = {
   },
 
   get(id: string) {
-    return unwrap<LendingRecord & { repayments?: Repayment[] }>(api.get(`/lending/${id}`))
+    return unwrap<LendingRecord & { categoryId: string; paymentMode: PaymentMode; repayments?: Repayment[] }>(api.get(`/lending/${id}`))
   },
 
   create(input: LendingInput) {
-    return unwrap<LendingRecord>(api.post('/lending', input))
+    const { notes, ...data } = input
+    return unwrap<LendingRecord>(api.post('/lending', { ...data, note: notes }))
+  },
+
+  update(id: string, input: LendingInput) {
+    return unwrap<LendingRecord & { categoryId: string; paymentMode: PaymentMode }>(api.put(`/lending/${id}`, input))
+  },
+
+  remove(id: string) {
+    return unwrap<{ deleted: boolean }>(api.delete(`/lending/${id}`))
   },
 
   addRepayment(id: string, input: RepaymentInput) {

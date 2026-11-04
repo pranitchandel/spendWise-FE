@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   BarChart3,
+  CalendarDays,
   CreditCard,
   HandCoins,
   LayoutDashboard,
@@ -20,6 +21,7 @@ const links = [
   { to: '/statistics', label: 'Statistics', icon: BarChart3 },
   { to: '/accounts', label: 'Accounts', icon: CreditCard },
   { to: '/recurring', label: 'Recurring', icon: Repeat },
+  { to: '/planned-expenses', label: 'Planned expenses', icon: CalendarDays },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/settings/categories', label: 'Categories', icon: Tags },
 ]

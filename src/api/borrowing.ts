@@ -27,11 +27,20 @@ export const borrowingApi = {
   },
 
   get(id: string) {
-    return unwrap<BorrowingRecord & { repayments?: Repayment[] }>(api.get(`/borrowing/${id}`))
+    return unwrap<BorrowingRecord & { categoryId: string; paymentMode: PaymentMode; repayments?: Repayment[] }>(api.get(`/borrowing/${id}`))
   },
 
   create(input: BorrowingInput) {
-    return unwrap<BorrowingRecord>(api.post('/borrowing', input))
+    const { notes, ...data } = input
+    return unwrap<BorrowingRecord>(api.post('/borrowing', { ...data, note: notes }))
+  },
+
+  update(id: string, input: BorrowingInput) {
+    return unwrap<BorrowingRecord & { categoryId: string; paymentMode: PaymentMode }>(api.put(`/borrowing/${id}`, input))
+  },
+
+  remove(id: string) {
+    return unwrap<{ deleted: boolean }>(api.delete(`/borrowing/${id}`))
   },
 
   addRepayment(id: string, input: RepaymentInput) {
