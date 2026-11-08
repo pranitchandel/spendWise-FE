@@ -68,6 +68,7 @@ export function LendingBorrowingPage() {
   const [historyRecordId, setHistoryRecordId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
+  const [draftStatusFilter, setDraftStatusFilter] = useState<StatusFilter>('ALL')
   const [page, setPage] = useState(1)
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: () => accountsApi.list() })
   const categoriesQuery = useQuery({ queryKey: ['categories', mode], queryFn: () => categoriesApi.list({ type: mode }) })
@@ -207,11 +208,14 @@ export function LendingBorrowingPage() {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--secondary)]" />
           <Input id="lending-record-search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="Search people, contact, notes, or amount" className="pl-9" />
         </label>
-        <label htmlFor="lending-status-filter" className="sr-only">Filter by repayment status</label>
-        <select id="lending-status-filter" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as StatusFilter); setPage(1) }} className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)] sm:w-auto">
-          <option value="ALL">All statuses</option>
-          {lendingStatuses.map((status) => <option key={status} value={status}>{status.replaceAll('_', ' ').toLowerCase()}</option>)}
-        </select>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <label htmlFor="lending-status-filter" className="sr-only">Filter by repayment status</label>
+          <select id="lending-status-filter" value={draftStatusFilter} onChange={(event) => setDraftStatusFilter(event.target.value as StatusFilter)} className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)] sm:w-auto">
+            <option value="ALL">All statuses</option>
+            {lendingStatuses.map((status) => <option key={status} value={status}>{status.replaceAll('_', ' ').toLowerCase()}</option>)}
+          </select>
+          <Button type="button" className="w-full sm:w-auto" disabled={draftStatusFilter === statusFilter} onClick={() => { setStatusFilter(draftStatusFilter); setPage(1) }}>Show results</Button>
+        </div>
       </div>
 
       <Modal open={addForm.isOpen || !!editingRecord} onClose={closeRecordForm} title={editingRecord ? `Edit ${lending ? 'lending' : 'borrowing'} record` : `Record ${lending ? 'money lent' : 'money borrowed'}`} className="sm:max-w-3xl">

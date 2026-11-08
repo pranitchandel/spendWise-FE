@@ -138,6 +138,9 @@ export function TransactionsPage() {
   const [type, setType] = useState<TransactionType | ''>('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [categoryId, setCategoryId] = useState('')
+  const [draftCategoryId, setDraftCategoryId] = useState('')
+  const [draftType, setDraftType] = useState<TransactionType | ''>('')
   const [draftFromDate, setDraftFromDate] = useState('')
   const [draftToDate, setDraftToDate] = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -162,8 +165,8 @@ export function TransactionsPage() {
   }, [search])
 
   const transactionsQuery = useQuery({
-    queryKey: ['transactions', debouncedSearch, type, fromDate, toDate, page],
-    queryFn: () => transactionsApi.listPage({ page, limit: 20, search: debouncedSearch, type, from: fromDate, to: toDate }),
+    queryKey: ['transactions', debouncedSearch, type, fromDate, toDate, categoryId, page],
+    queryFn: () => transactionsApi.listPage({ page, limit: 20, search: debouncedSearch, type, from: fromDate, to: toDate, categoryId }),
     placeholderData: keepPreviousData,
   })
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: () => accountsApi.list() })
@@ -190,37 +193,60 @@ export function TransactionsPage() {
     ;(days[transaction.transactionDate] ??= []).push(transaction)
     return days
   }, {})
-  const activeFilterCount = Number(Boolean(fromDate)) + Number(Boolean(toDate))
+  const activeFilterCount = Number(Boolean(type)) + Number(Boolean(fromDate)) + Number(Boolean(toDate)) + Number(Boolean(categoryId))
 
-  function renderTypeFilter(id: string, className = '') {
-    return <div className={`min-w-0 ${className}`}>
-      <label htmlFor={id} className="sr-only">Filter by transaction type</label>
-       <select id={id} value={type} onChange={(event) => { setType(event.target.value as TransactionType | ''); setPage(1) }} className="h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] py-2 pl-3 text-sm text-[var(--foreground)]">
-        <option value="">All types</option>
-        {transactionTypes.map((option) => <option key={option} value={option}>{option.replaceAll('_', ' ')}</option>)}
-      </select>
-    </div>
+  const filtersDirty = draftType !== type || draftFromDate !== fromDate || draftToDate !== toDate || draftCategoryId !== categoryId
+
+  function applyFilters() {
+    setType(draftType)
+    setFromDate(draftFromDate)
+    setToDate(draftToDate)
+    setCategoryId(draftCategoryId)
+    setPage(1)
   }
 
-  function renderDateFilters(idPrefix: string, startDate: string, endDate: string, updateStartDate: (value: string) => void, updateEndDate: (value: string) => void) {
-    return <div className="flex flex-wrap items-end gap-3">
-      <label htmlFor={`${idPrefix}-transaction-from`} className="space-y-1 text-xs font-medium text-[var(--secondary)]">From date
-        <Input id={`${idPrefix}-transaction-from`} type="date" value={startDate} max={endDate || undefined} onChange={(event) => { updateStartDate(event.target.value); setPage(1) }} className="h-10" />
+  function clearFilters() {
+    setDraftType('')
+    setDraftFromDate('')
+    setDraftToDate('')
+    setDraftCategoryId('')
+    setType('')
+    setFromDate('')
+    setToDate('')
+    setCategoryId('')
+    setPage(1)
+  }
+
+  function renderFilterFields(idPrefix: string) {
+    const selectClass = 'h-10 w-full min-w-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)]'
+    return <>
+      <label htmlFor={`${idPrefix}-type`} className="block min-w-0 space-y-1 text-xs font-medium text-[var(--secondary)]">Type
+        <select id={`${idPrefix}-type`} value={draftType} onChange={(event) => { setDraftType(event.target.value as TransactionType | ''); setDraftCategoryId('') }} className={selectClass}>
+          <option value="">All types</option>
+          {transactionTypes.map((option) => <option key={option} value={option}>{option.replaceAll('_', ' ')}</option>)}
+        </select>
       </label>
-      <label htmlFor={`${idPrefix}-transaction-to`} className="space-y-1 text-xs font-medium text-[var(--secondary)]">To date
-        <Input id={`${idPrefix}-transaction-to`} type="date" value={endDate} min={startDate || undefined} onChange={(event) => { updateEndDate(event.target.value); setPage(1) }} className="h-10" />
+      <label htmlFor={`${idPrefix}-category`} className="block min-w-0 space-y-1 text-xs font-medium text-[var(--secondary)]">Category
+        <select id={`${idPrefix}-category`} value={draftCategoryId} onChange={(event) => setDraftCategoryId(event.target.value)} className={selectClass}>
+          <option value="">All categories</option>
+          {categoriesQuery.data?.filter((category) => !draftType || category.type === categoryType[draftType]).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+        </select>
       </label>
-      {startDate || endDate ? <Button type="button" size="sm" variant="ghost" onClick={() => { updateStartDate(''); updateEndDate(''); setPage(1) }}><X className="h-4 w-4" />Clear dates</Button> : null}
-    </div>
+      <label htmlFor={`${idPrefix}-from`} className="block min-w-0 space-y-1 text-xs font-medium text-[var(--secondary)]">From date
+        <Input id={`${idPrefix}-from`} type="date" value={draftFromDate} max={draftToDate || undefined} onChange={(event) => setDraftFromDate(event.target.value)} className="h-10" />
+      </label>
+      <label htmlFor={`${idPrefix}-to`} className="block min-w-0 space-y-1 text-xs font-medium text-[var(--secondary)]">To date
+        <Input id={`${idPrefix}-to`} type="date" value={draftToDate} min={draftFromDate || undefined} onChange={(event) => setDraftToDate(event.target.value)} className="h-10" />
+      </label>
+    </>
   }
 
   function handleMobileFiltersOpenChange(open: boolean) {
     if (open) {
+      setDraftType(type)
       setDraftFromDate(fromDate)
       setDraftToDate(toDate)
-    } else {
-      setDraftFromDate(fromDate)
-      setDraftToDate(toDate)
+      setDraftCategoryId(categoryId)
     }
     setFiltersOpen(open)
   }
@@ -238,19 +264,22 @@ export function TransactionsPage() {
         <Link className="hidden lg:block" to="/transactions?add=1"><Button><Plus className="h-4 w-4" />Add transaction</Button></Link>
       </div>
       <div className="space-y-3">
-        <label className="relative block min-w-0" htmlFor="transaction-search">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--secondary)]" />
-          <Input id="transaction-search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="Search description, note, or tag" className="pl-9" />
-        </label>
-        <div className="flex w-full items-center gap-2 sm:hidden">
-          {renderTypeFilter('transaction-type-mobile', 'w-full flex-1')}
-          <MobileFilterSheet open={filtersOpen} onOpenChange={handleMobileFiltersOpenChange} onApply={() => { setFromDate(draftFromDate); setToDate(draftToDate) }} activeCount={activeFilterCount} iconOnly>
-            {renderDateFilters('mobile', draftFromDate, draftToDate, setDraftFromDate, setDraftToDate)}
+        <div className="flex items-center gap-2">
+          <label className="relative block min-w-0 flex-1" htmlFor="transaction-search">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--secondary)]" />
+            <Input id="transaction-search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="Search description, note, or tag" className="pl-9" />
+          </label>
+          <MobileFilterSheet open={filtersOpen} onOpenChange={handleMobileFiltersOpenChange} onApply={applyFilters} activeCount={activeFilterCount} iconOnly>
+            <div className="space-y-3">
+              {renderFilterFields('mobile-transaction')}
+              {activeFilterCount > 0 ? <Button type="button" size="sm" variant="ghost" onClick={() => { clearFilters(); setFiltersOpen(false) }}><X className="h-4 w-4" />Clear filters</Button> : null}
+            </div>
           </MobileFilterSheet>
         </div>
-        <div className="hidden items-end gap-3 sm:flex">
-          {renderTypeFilter('transaction-type-desktop')}
-          {renderDateFilters('desktop', fromDate, toDate, setFromDate, setToDate)}
+        <div className="hidden flex-wrap items-end gap-3 sm:flex">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{renderFilterFields('desktop-transaction')}</div>
+          <Button type="button" onClick={applyFilters} disabled={!filtersDirty}>Show results</Button>
+          {activeFilterCount > 0 || filtersDirty ? <Button type="button" variant="ghost" onClick={clearFilters}><X className="h-4 w-4" />Clear filters</Button> : null}
         </div>
       </div>
       {transactionsQuery.data.items.length === 0 ? (

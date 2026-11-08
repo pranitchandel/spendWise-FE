@@ -39,7 +39,7 @@ export const authApi = {
     return unwrap<User>(api.get('/users/me'))
   },
 
-  async updateProfile(input: Partial<Pick<User, 'name' | 'theme' | 'preferredCurrency' | 'timezone'>>) {
+  async updateProfile(input: Partial<Pick<User, 'email' | 'name' | 'theme' | 'preferredCurrency' | 'timezone'>>) {
     return unwrap<User>(api.put('/users/me', input))
   },
 

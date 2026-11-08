@@ -1,4 +1,4 @@
-import { ArrowLeftRight, BarChart3, CalendarDays, HandCoins, Home, MoreHorizontal, PiggyBank, Repeat, Settings, Wallet, X, CreditCard } from 'lucide-react'
+import { ArrowLeftRight, BarChart3, CalendarDays, HandCoins, Home, MoreHorizontal, PiggyBank, Repeat, ScrollText, Settings, Wallet, X, CreditCard } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/cn'
@@ -19,6 +19,7 @@ export function MobileBottomNav() {
     { to: '/recurring', label: 'Recurring payments', icon: Repeat },
     { to: '/planned-expenses', label: 'Planned expenses', icon: CalendarDays },
     { to: '/savings', label: 'Savings', icon: PiggyBank },
+    { to: '/activity-log', label: 'Activity log', icon: ScrollText },
     { to: '/settings', label: 'Settings', icon: Settings },
   ]
   const moreActive = moreItems.some(({ to }) => location.pathname.startsWith(to))

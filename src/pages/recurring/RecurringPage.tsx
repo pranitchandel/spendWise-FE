@@ -50,6 +50,7 @@ export function RecurringPage() {
   const [editingRule, setEditingRule] = useState<RecurringRule | null>(null)
   const [ruleToDelete, setRuleToDelete] = useState<RecurringRule | null>(null)
   const [showInactive, setShowInactive] = useState(false)
+  const [draftShowInactive, setDraftShowInactive] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [page, setPage] = useState(1)
   const rulesQuery = useQuery({
@@ -167,13 +168,16 @@ export function RecurringPage() {
         </div>
       </div>
 
-      <label className="hidden items-center gap-2 text-sm text-[var(--secondary)] sm:flex">
-        <input type="checkbox" checked={showInactive} onChange={(event) => { setShowInactive(event.target.checked); setPage(1) }} className="h-4 w-4 accent-[var(--primary)]" />
-        Show inactive schedules
-      </label>
-      <MobileFilterSheet open={filtersOpen} onOpenChange={setFiltersOpen} activeCount={Number(showInactive)}>
+      <div className="hidden items-center gap-3 sm:flex">
         <label className="flex items-center gap-2 text-sm text-[var(--secondary)]">
-          <input type="checkbox" checked={showInactive} onChange={(event) => { setShowInactive(event.target.checked); setPage(1) }} className="h-4 w-4 accent-[var(--primary)]" />
+          <input type="checkbox" checked={draftShowInactive} onChange={(event) => setDraftShowInactive(event.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+          Show inactive schedules
+        </label>
+        <Button type="button" size="sm" disabled={draftShowInactive === showInactive} onClick={() => { setShowInactive(draftShowInactive); setPage(1) }}>Show results</Button>
+      </div>
+      <MobileFilterSheet open={filtersOpen} onOpenChange={(open) => { if (open) setDraftShowInactive(showInactive); setFiltersOpen(open) }} onApply={() => { setShowInactive(draftShowInactive); setPage(1) }} activeCount={Number(showInactive)}>
+        <label className="flex items-center gap-2 text-sm text-[var(--secondary)]">
+          <input type="checkbox" checked={draftShowInactive} onChange={(event) => setDraftShowInactive(event.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
           Show inactive schedules
         </label>
       </MobileFilterSheet>

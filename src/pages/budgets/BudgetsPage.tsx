@@ -30,6 +30,7 @@ export function BudgetsPage() {
   const addForm = useMobileAddForm()
   const initial = currentYearMonth()
   const [month, setMonth] = useState(`${initial.year}-${String(initial.month).padStart(2, '0')}`)
+  const [draftMonth, setDraftMonth] = useState(month)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [pageError, setPageError] = useState('')
   const [yearText, monthText] = month.split('-')
@@ -78,6 +79,7 @@ export function BudgetsPage() {
     onSuccess: async (copiedBudget) => {
       await queryClient.invalidateQueries({ queryKey: ['budget'] })
       setMonth(`${copiedBudget.year}-${String(copiedBudget.month).padStart(2, '0')}`)
+      setDraftMonth(`${copiedBudget.year}-${String(copiedBudget.month).padStart(2, '0')}`)
       setPageError('')
       showToast('Budget copied to next month.', 'success')
     },
@@ -108,14 +110,15 @@ export function BudgetsPage() {
         <div><p className="text-sm font-medium text-[var(--primary)]">Plan with intention</p><h2 className="mt-1 text-2xl font-semibold">Monthly budgets</h2></div>
         <div className="flex items-center gap-2">
           <Link className="hidden lg:block" to="/budgets?add=1"><Button><Plus className="h-4 w-4" />{budget ? 'Edit budget' : 'Set budget'}</Button></Link>
-          <label htmlFor="budget-month-desktop" className="hidden items-center gap-3 text-sm font-medium text-[var(--secondary)] sm:flex">Month<input id="budget-month-desktop" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-10 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-[var(--foreground)]" /></label>
+          <label htmlFor="budget-month-desktop" className="hidden items-center gap-3 text-sm font-medium text-[var(--secondary)] sm:flex">Month<input id="budget-month-desktop" type="month" value={draftMonth} onChange={(event) => setDraftMonth(event.target.value)} className="h-10 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-[var(--foreground)]" /></label>
+          <Button type="button" className="hidden sm:inline-flex" disabled={!draftMonth || draftMonth === month} onClick={() => setMonth(draftMonth)}>Show results</Button>
           <Button type="button" variant="outline" size="icon" aria-label="Refresh budget actuals" title="Refresh budget actuals" onClick={() => void budgetQuery.refetch()} disabled={budgetQuery.isFetching}>
             <RefreshCw className={`h-4 w-4 ${budgetQuery.isFetching ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
-      <MobileFilterSheet open={filtersOpen} onOpenChange={setFiltersOpen} activeCount={1}>
-        <label htmlFor="budget-month-mobile" className="block space-y-2 text-sm font-medium">Budget month<input id="budget-month-mobile" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-[var(--foreground)]" /></label>
+      <MobileFilterSheet open={filtersOpen} onOpenChange={(open) => { if (open) setDraftMonth(month); setFiltersOpen(open) }} onApply={() => { if (draftMonth) setMonth(draftMonth) }} activeCount={1}>
+        <label htmlFor="budget-month-mobile" className="block space-y-2 text-sm font-medium">Budget month<input id="budget-month-mobile" type="month" value={draftMonth} onChange={(event) => setDraftMonth(event.target.value)} className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-[var(--foreground)]" /></label>
       </MobileFilterSheet>
 
       {budget ? <Card className="grid gap-4 p-5 sm:grid-cols-4">

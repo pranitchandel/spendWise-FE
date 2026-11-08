@@ -13,6 +13,7 @@ import { TransactionsPage } from '@/pages/transactions/TransactionsPage'
 import { CategoriesPage } from '@/pages/settings/CategoriesPage'
 import { PlannedExpensesPage } from '@/pages/planned-expenses/PlannedExpensesPage'
 import { SavingsPage } from '@/pages/savings/SavingsPage'
+import { ActivityLogPage } from '@/pages/activity/ActivityLogPage'
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="recurring" element={<RecurringPage />} />
           <Route path="planned-expenses" element={<PlannedExpensesPage />} />
           <Route path="savings" element={<SavingsPage />} />
+          <Route path="activity-log" element={<ActivityLogPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Route>

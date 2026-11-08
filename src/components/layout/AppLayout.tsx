@@ -17,6 +17,7 @@ const titles: Record<string, string> = {
   '/recurring': 'Recurring',
   '/planned-expenses': 'Planned expenses',
   '/savings': 'Savings',
+  '/activity-log': 'Activity log',
   '/settings': 'Settings',
   '/settings/categories': 'Categories',
   '/settings/profile': 'Profile',

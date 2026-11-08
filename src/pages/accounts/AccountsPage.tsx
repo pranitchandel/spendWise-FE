@@ -38,6 +38,7 @@ export function AccountsPage() {
   const { showToast } = useToast()
   const addForm = useMobileAddForm()
   const [includeArchived, setIncludeArchived] = useState(false)
+  const [draftIncludeArchived, setDraftIncludeArchived] = useState(false)
   const [page, setPage] = useState(1)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<Awaited<ReturnType<typeof accountsApi.get>> | null>(null)
@@ -115,13 +116,16 @@ export function AccountsPage() {
         <div><p className="text-sm font-medium text-[var(--primary)]">Your money</p><h2 className="mt-1 text-2xl font-semibold">Accounts</h2></div>
         <Link className="hidden lg:block" to="/accounts?add=1" onClick={openAddForm}><Button><Plus className="h-4 w-4" />Add account</Button></Link>
       </div>
-      <label className="hidden items-center gap-2 text-sm text-[var(--secondary)] sm:flex">
-        <input type="checkbox" checked={includeArchived} onChange={(event) => { setIncludeArchived(event.target.checked); setPage(1) }} className="h-4 w-4 accent-[var(--primary)]" />
-        Show archived accounts
-      </label>
-      <MobileFilterSheet open={filtersOpen} onOpenChange={setFiltersOpen} activeCount={Number(includeArchived)}>
+      <div className="hidden items-center gap-3 sm:flex">
         <label className="flex items-center gap-2 text-sm text-[var(--secondary)]">
-          <input type="checkbox" checked={includeArchived} onChange={(event) => { setIncludeArchived(event.target.checked); setPage(1) }} className="h-4 w-4 accent-[var(--primary)]" />
+          <input type="checkbox" checked={draftIncludeArchived} onChange={(event) => setDraftIncludeArchived(event.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+          Show archived accounts
+        </label>
+        <Button type="button" size="sm" disabled={draftIncludeArchived === includeArchived} onClick={() => { setIncludeArchived(draftIncludeArchived); setPage(1) }}>Show results</Button>
+      </div>
+      <MobileFilterSheet open={filtersOpen} onOpenChange={(open) => { if (open) setDraftIncludeArchived(includeArchived); setFiltersOpen(open) }} onApply={() => { setIncludeArchived(draftIncludeArchived); setPage(1) }} activeCount={Number(includeArchived)}>
+        <label className="flex items-center gap-2 text-sm text-[var(--secondary)]">
+          <input type="checkbox" checked={draftIncludeArchived} onChange={(event) => setDraftIncludeArchived(event.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
           Show archived accounts
         </label>
       </MobileFilterSheet>

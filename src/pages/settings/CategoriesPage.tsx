@@ -43,6 +43,7 @@ export function CategoriesPage() {
   const { showToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const [includeArchived, setIncludeArchived] = useState(false)
+  const [draftIncludeArchived, setDraftIncludeArchived] = useState(false)
   const [page, setPage] = useState(1)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
@@ -132,13 +133,16 @@ export function CategoriesPage() {
         <Button className="hidden lg:inline-flex" onClick={openCreate}><Plus className="h-4 w-4" />Add category</Button>
       </div>
 
-      <label className="hidden items-center gap-2 text-sm text-[var(--secondary)] sm:flex">
-        <input type="checkbox" checked={includeArchived} onChange={(event) => { setIncludeArchived(event.target.checked); setPage(1) }} className="h-4 w-4 accent-[var(--primary)]" />
-        Show archived categories
-      </label>
-      <MobileFilterSheet open={filtersOpen} onOpenChange={setFiltersOpen} activeCount={Number(includeArchived)}>
+      <div className="hidden items-center gap-3 sm:flex">
         <label className="flex items-center gap-2 text-sm text-[var(--secondary)]">
-          <input type="checkbox" checked={includeArchived} onChange={(event) => { setIncludeArchived(event.target.checked); setPage(1) }} className="h-4 w-4 accent-[var(--primary)]" />
+          <input type="checkbox" checked={draftIncludeArchived} onChange={(event) => setDraftIncludeArchived(event.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+          Show archived categories
+        </label>
+        <Button type="button" size="sm" disabled={draftIncludeArchived === includeArchived} onClick={() => { setIncludeArchived(draftIncludeArchived); setPage(1) }}>Show results</Button>
+      </div>
+      <MobileFilterSheet open={filtersOpen} onOpenChange={(open) => { if (open) setDraftIncludeArchived(includeArchived); setFiltersOpen(open) }} onApply={() => { setIncludeArchived(draftIncludeArchived); setPage(1) }} activeCount={Number(includeArchived)}>
+        <label className="flex items-center gap-2 text-sm text-[var(--secondary)]">
+          <input type="checkbox" checked={draftIncludeArchived} onChange={(event) => setDraftIncludeArchived(event.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
           Show archived categories
         </label>
       </MobileFilterSheet>

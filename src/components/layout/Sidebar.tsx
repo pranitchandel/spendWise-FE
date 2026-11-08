@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Repeat,
   PiggyBank,
+  ScrollText,
   Settings,
   Tags,
   Wallet,
@@ -24,6 +25,7 @@ const links = [
   { to: '/recurring', label: 'Recurring', icon: Repeat },
   { to: '/planned-expenses', label: 'Planned expenses', icon: CalendarDays },
   { to: '/savings', label: 'Savings', icon: PiggyBank },
+  { to: '/activity-log', label: 'Activity log', icon: ScrollText },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/settings/categories', label: 'Categories', icon: Tags },
 ]

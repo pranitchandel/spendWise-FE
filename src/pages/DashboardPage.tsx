@@ -17,6 +17,7 @@ function currentMonth() {
 
 export function DashboardPage() {
   const [month, setMonth] = useState(currentMonth)
+  const [draftMonth, setDraftMonth] = useState(currentMonth)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [yearText, monthText] = month.split('-')
   const year = Number(yearText)
@@ -59,14 +60,15 @@ export function DashboardPage() {
         </div>
         <div className="flex items-center gap-2">
           <label className="hidden items-center gap-3 text-sm font-medium text-[var(--secondary)] sm:flex" htmlFor="dashboard-month-desktop">Month
-            <input id="dashboard-month-desktop" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-10 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-[var(--foreground)]" />
+            <input id="dashboard-month-desktop" type="month" value={draftMonth} onChange={(event) => setDraftMonth(event.target.value)} className="h-10 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-[var(--foreground)]" />
           </label>
+          <Button type="button" className="hidden sm:inline-flex" disabled={!draftMonth || draftMonth === month} onClick={() => setMonth(draftMonth)}>Show results</Button>
           <Link className="hidden lg:block" to="/transactions?add=1"><Button><ArrowDownLeft className="h-4 w-4" />Add transaction</Button></Link>
         </div>
       </div>
-      <MobileFilterSheet open={filtersOpen} onOpenChange={setFiltersOpen} activeCount={1}>
+      <MobileFilterSheet open={filtersOpen} onOpenChange={(open) => { if (open) setDraftMonth(month); setFiltersOpen(open) }} onApply={() => { if (draftMonth) setMonth(draftMonth) }} activeCount={1}>
         <label className="block space-y-2 text-sm font-medium" htmlFor="dashboard-month-mobile">Dashboard month
-          <input id="dashboard-month-mobile" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-[var(--foreground)]" />
+          <input id="dashboard-month-mobile" type="month" value={draftMonth} onChange={(event) => setDraftMonth(event.target.value)} className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-[var(--foreground)]" />
         </label>
       </MobileFilterSheet>
 
