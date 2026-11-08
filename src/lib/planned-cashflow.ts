@@ -149,16 +149,11 @@ export function buildPlannedCashflowForecast(
           const actualSpent = isFutureFallback ? 0 : item.actualSpent
           const remainingBudget = Math.max(0, item.budgetAmount - actualSpent)
           if (remainingBudget <= 0) continue
-          const alreadyPlanned = entries
-            .filter((entry) => entry.direction === 'EXPENSE' && entry.categoryId === item.categoryId && entry.date >= monthStart && entry.date <= monthEnd)
-            .reduce((total, entry) => total + entry.amount, 0)
-          const remainingEnvelope = Math.max(0, remainingBudget - alreadyPlanned)
-          if (!remainingEnvelope) continue
-          budgetOutflow += remainingEnvelope
+          budgetOutflow += remainingBudget
           const monthKey = `${monthParts.year}-${monthParts.month.toString().padStart(2, '0')}`
           const currentReserve = monthlyBudgetReserves.get(monthKey)
           monthlyBudgetReserves.set(monthKey, {
-            amount: (currentReserve?.amount ?? 0) + remainingEnvelope,
+            amount: (currentReserve?.amount ?? 0) + remainingBudget,
             isFallback: isFutureFallback,
             date: monthlyBudgetDate(incomes, monthStart, monthEnd, today),
           })

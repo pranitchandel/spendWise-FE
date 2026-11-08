@@ -44,7 +44,7 @@ describe('planned cash flow', () => {
     expect(account.balance).toBe(10_000)
   })
 
-  it('reserves the unspent monthly budget after accounting for matching campaign estimates', () => {
+  it('adds planned campaign estimates on top of the unspent monthly budget, even in the same category', () => {
     const expense: PlannedExpense = {
       id: 'trip', name: 'Trip', dueDate: '2026-12-15', status: 'PLANNED', notes: '',
       items: [{ id: 'stay', name: 'Stay', categoryId: 'travel', categoryName: 'Travel', accountId: 'checking', accountName: 'Checking', estimatedAmount: 2_000, spentAmount: 0, remainingAmount: 2_000, overBudgetAmount: 0, spendingPercent: 0, transactions: [] }],
@@ -61,12 +61,12 @@ describe('planned cash flow', () => {
     const budgetEntry = forecast.days.find((day) => day.date === '2026-12-31')?.entries[0]
 
     expect(forecast.campaignOutflow).toBe(2_000)
-    expect(forecast.budgetOutflow).toBe(2_000)
-    expect(forecast.endingBalance).toBe(6_000)
-    expect(budgetEntry).toMatchObject({ direction: 'EXPENSE', amount: 2_000, entryType: 'BUDGET', accountId: null })
+    expect(forecast.budgetOutflow).toBe(4_000)
+    expect(forecast.endingBalance).toBe(4_000)
+    expect(budgetEntry).toMatchObject({ direction: 'EXPENSE', amount: 4_000, entryType: 'BUDGET', accountId: null })
   })
 
-  it('uses the larger planned campaign amount when it exceeds the remaining budget', () => {
+  it('keeps the full budget reserve and adds a campaign that exceeds it', () => {
     const expense: PlannedExpense = {
       id: 'trip', name: 'Trip', dueDate: '2026-12-15', status: 'PLANNED', notes: '',
       items: [{ id: 'stay', name: 'Stay', categoryId: 'travel', categoryName: 'Travel', accountId: null, accountName: null, estimatedAmount: 6_000, spentAmount: 0, remainingAmount: 6_000, overBudgetAmount: 0, spendingPercent: 0, transactions: [] }],
@@ -82,8 +82,8 @@ describe('planned cash flow', () => {
     const forecast = buildPlannedCashflowForecast([account], [], [expense], [budget], '2026-11-01', 2)
 
     expect(forecast.campaignOutflow).toBe(6_000)
-    expect(forecast.budgetOutflow).toBe(0)
-    expect(forecast.endingBalance).toBe(4_000)
+    expect(forecast.budgetOutflow).toBe(4_000)
+    expect(forecast.endingBalance).toBe(0)
   })
 
   it('uses the current month budget for missing months and prefers a saved month budget', () => {
