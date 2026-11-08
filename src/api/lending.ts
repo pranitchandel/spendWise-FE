@@ -28,11 +28,17 @@ export interface RepaymentInput {
   note?: string
 }
 
+export interface LendingListPage extends Paginated<LendingRecord> {
+  totalOutstanding: number
+}
+
 export const lendingApi = {
   list(params?: { status?: string; page?: number; limit?: number }) {
-    return unwrap<LendingRecord[] | Paginated<LendingRecord>>(api.get('/lending', { params })).then(
-      (data) => (Array.isArray(data) ? data : data.items),
-    )
+    return unwrap<Paginated<LendingRecord>>(api.get('/lending', { params }))
+  },
+
+  listPage(params: { status?: string; search?: string; page: number; limit: number }) {
+    return unwrap<LendingListPage>(api.get('/lending', { params }))
   },
 
   get(id: string) {

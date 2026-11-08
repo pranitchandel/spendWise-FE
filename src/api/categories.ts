@@ -1,5 +1,5 @@
 import { api, unwrap } from './client'
-import type { Category, CategoryType } from '@/types'
+import type { Category, CategoryType, Paginated } from '@/types'
 
 export interface CategoryInput {
   name: string
@@ -7,12 +7,15 @@ export interface CategoryInput {
   icon?: string
   color?: string
 }
-
 export const categoriesApi = {
-  list(params?: { type?: CategoryType; includeArchived?: boolean }) {
-    return unwrap<Category[]>(api.get('/categories', { params })).then((data) =>
-      Array.isArray(data) ? data : [],
+  list(params: { type?: CategoryType; includeArchived?: boolean; page?: number; limit?: number } = {}) {
+    return unwrap<Category[] | Paginated<Category>>(api.get('/categories', { params: { page: 1, limit: 100, ...params } })).then((data) =>
+      Array.isArray(data) ? data : data.items,
     )
+  },
+
+  listPage(params: { type?: CategoryType; includeArchived?: boolean; page: number; limit: number }) {
+    return unwrap<Paginated<Category>>(api.get('/categories', { params }))
   },
 
   create(input: CategoryInput) {
@@ -25,9 +28,5 @@ export const categoriesApi = {
 
   remove(id: string) {
     return unwrap<{ id: string } | void>(api.delete(`/categories/${id}`))
-  },
-  
-  permanentlyDelete(id: string) {
-    return unwrap<{ id: string }>(api.delete(`/categories/${id}/permanent`))
   },
 }

@@ -6,6 +6,7 @@ import {
   HandCoins,
   LayoutDashboard,
   Repeat,
+  PiggyBank,
   Settings,
   Tags,
   Wallet,
@@ -22,6 +23,7 @@ const links = [
   { to: '/accounts', label: 'Accounts', icon: CreditCard },
   { to: '/recurring', label: 'Recurring', icon: Repeat },
   { to: '/planned-expenses', label: 'Planned expenses', icon: CalendarDays },
+  { to: '/savings', label: 'Savings', icon: PiggyBank },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/settings/categories', label: 'Categories', icon: Tags },
 ]

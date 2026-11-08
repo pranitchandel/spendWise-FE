@@ -12,16 +12,17 @@ import { categoriesApi } from '@/api/categories'
 import { lendingApi, type LendingInput, type RepaymentInput } from '@/api/lending'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { CurrencyAmount } from '@/components/ui/CurrencyAmount'
 import { Input } from '@/components/ui/Input'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { Modal } from '@/components/ui/Modal'
+import { PaginationControls } from '@/components/ui/PaginationControls'
 import { useToast } from '@/contexts/ToastContext'
 import { todayISO, formatDate } from '@/lib/date'
 import type { BorrowingRecord, LendingRecord, LendingStatus, Repayment } from '@/types'
 import { useMobileAddForm } from '@/hooks/useMobileAddForm'
 
 const paymentModes = ['UPI', 'DEBIT_CARD', 'CREDIT_CARD', 'CASH', 'BANK_TRANSFER', 'NET_BANKING', 'OTHER'] as const
-const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
 const recordSchema = z.object({
   personName: z.string().trim().min(1, 'Enter a person’s name'),
   phone: z.string().max(40).optional(),
@@ -67,10 +68,11 @@ export function LendingBorrowingPage() {
   const [historyRecordId, setHistoryRecordId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
+  const [page, setPage] = useState(1)
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: () => accountsApi.list() })
   const categoriesQuery = useQuery({ queryKey: ['categories', mode], queryFn: () => categoriesApi.list({ type: mode }) })
-  const lendingQuery = useQuery({ queryKey: ['lending'], queryFn: () => lendingApi.list() })
-  const borrowingQuery = useQuery({ queryKey: ['borrowing'], queryFn: () => borrowingApi.list() })
+  const lendingQuery = useQuery({ queryKey: ['lending', statusFilter, search, page], queryFn: () => lendingApi.listPage({ status: statusFilter || undefined, search: search.trim() || undefined, page, limit: 20 }), placeholderData: (previous) => previous })
+  const borrowingQuery = useQuery({ queryKey: ['borrowing', statusFilter, search, page], queryFn: () => borrowingApi.listPage({ status: statusFilter || undefined, search: search.trim() || undefined, page, limit: 20 }), placeholderData: (previous) => previous })
   const repaymentHistoryQuery = useQuery<DebtRecordDetails>({
     queryKey: ['lending-record-detail', mode, historyRecordId],
     queryFn: () => lending
@@ -136,32 +138,12 @@ export function LendingBorrowingPage() {
     return <div role="alert" className="text-sm text-[var(--danger)]">Lending data couldn’t be loaded.</div>
   }
 
-  const records = lending ? lendingQuery.data : borrowingQuery.data
-  const totalOutstanding = records.reduce((sum, record) => sum + record.outstanding, 0)
-  const normalizedSearch = search.trim().toLowerCase()
-  const filteredRecords = records.filter((record) => {
-    if (statusFilter !== 'ALL' && record.status !== statusFilter) return false
-    if (!normalizedSearch) return true
-    const person = 'personName' in record ? record.personName : record.lenderName
-    const detail = 'description' in record ? record.description : record.repaymentTerms
-    const date = 'lendingDate' in record ? record.lendingDate : record.borrowingDate
-    return [
-      person,
-      record.phone,
-      record.email,
-      detail,
-      record.notes,
-      record.status,
-      date,
-      record.originalAmount,
-      record.outstanding,
-      record.totalRepaid,
-    ].some((value) => String(value ?? '').toLowerCase().includes(normalizedSearch))
-  })
-  const filteredOutstanding = filteredRecords.reduce((sum, record) => sum + record.outstanding, 0)
+  const recordPage = lending ? lendingQuery.data : borrowingQuery.data
+  const records = recordPage?.items ?? []
+  const totalOutstanding = recordPage?.totalOutstanding ?? 0
+  const filteredOutstanding = totalOutstanding
   const selectedRecordInfo = records.find((record) => record.id === selectedRecord)
   const fieldClass = 'h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)]'
-
   function closeRecordForm() {
     setEditingRecord(null)
     addForm.close()
@@ -206,24 +188,27 @@ export function LendingBorrowingPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><p className="text-sm font-medium text-[var(--primary)]">People and repayments</p><h2 className="mt-1 text-2xl font-semibold">Lending &amp; borrowing</h2></div>
-        <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--card)] p-1" role="group" aria-label="Choose lending or borrowing">
-          <Link to="/lending" className={`rounded-md px-3 py-2 text-sm font-medium ${lending ? 'bg-[var(--primary)] text-white' : 'text-[var(--secondary)]'}`}>Lending</Link>
-          <Link to="/borrowing" className={`rounded-md px-3 py-2 text-sm font-medium ${!lending ? 'bg-[var(--primary)] text-white' : 'text-[var(--secondary)]'}`}>Borrowing</Link>
-        </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--card)] p-1" role="group" aria-label="Choose lending or borrowing">
+              <Link to="/lending" className={`rounded-md px-3 py-2 text-sm font-medium ${lending ? 'bg-[var(--primary)] text-white' : 'text-[var(--secondary)]'}`}>Lending</Link>
+              <Link to="/borrowing" className={`rounded-md px-3 py-2 text-sm font-medium ${!lending ? 'bg-[var(--primary)] text-white' : 'text-[var(--secondary)]'}`}>Borrowing</Link>
+            </div>
+            <Link className="hidden lg:block" to={`${lending ? '/lending' : '/borrowing'}?add=1`}><Button><Plus className="h-4 w-4" />Add record</Button></Link>
+          </div>
       </div>
 
       <Card className="flex items-center justify-between gap-4 p-5">
-        <div><p className="text-sm text-[var(--secondary)]">{lending ? 'Still owed to you' : 'You still owe'}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{currency.format(totalOutstanding)}</p></div>
+        <div><p className="text-sm text-[var(--secondary)]">{lending ? 'Still owed to you' : 'You still owe'}</p><p className="mt-1 text-2xl font-semibold"><CurrencyAmount amount={totalOutstanding} minimumFractionDigits={0} /></p></div>
         <div className="grid h-11 w-11 place-items-center rounded-lg bg-[var(--muted)] text-[var(--primary)]"><HandCoins className="h-5 w-5" /></div>
       </Card>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <label className="relative min-w-0 flex-1" htmlFor="lending-record-search">
+      <div className="space-y-3">
+        <label className="relative block min-w-0" htmlFor="lending-record-search">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--secondary)]" />
-          <Input id="lending-record-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search people, contact, notes, or amount" className="pl-9" />
+          <Input id="lending-record-search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="Search people, contact, notes, or amount" className="pl-9" />
         </label>
         <label htmlFor="lending-status-filter" className="sr-only">Filter by repayment status</label>
-        <select id="lending-status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)} className="h-11 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)]">
+        <select id="lending-status-filter" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as StatusFilter); setPage(1) }} className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)] sm:w-auto">
           <option value="ALL">All statuses</option>
           {lendingStatuses.map((status) => <option key={status} value={status}>{status.replaceAll('_', ' ').toLowerCase()}</option>)}
         </select>
@@ -251,11 +236,11 @@ export function LendingBorrowingPage() {
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h3 className="font-semibold">{lending ? 'People who owe you' : 'People you owe'}</h3>
-            <span className="text-sm font-semibold tabular-nums">{currency.format(filteredOutstanding)} <span className="text-xs font-normal text-[var(--secondary)]">outstanding</span></span>
+            <span className="text-sm font-semibold"><CurrencyAmount amount={filteredOutstanding} minimumFractionDigits={0} /> <span className="text-xs font-normal text-[var(--secondary)]">outstanding</span></span>
           </div>
-          <span className="text-right text-xs text-[var(--secondary)]">{filteredRecords.length} of {records.length}</span>
+          <span className="text-right text-xs text-[var(--secondary)]">{recordPage?.total ?? 0} records</span>
         </div>
-        {filteredRecords.length ? filteredRecords.map((record) => {
+        {records.length ? records.map((record) => {
           const person = 'personName' in record ? record.personName : record.lenderName
           const date = 'lendingDate' in record ? record.lendingDate : record.borrowingDate
           return <Card key={record.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -264,7 +249,7 @@ export function LendingBorrowingPage() {
               <div className="min-w-0"><p className="truncate font-semibold">{person}</p><p className="mt-1 text-xs text-[var(--secondary)]">{formatDate(date)} · {record.status.replaceAll('_', ' ').toLowerCase()}</p></div>
             </div>
             <div className="flex items-center justify-between gap-4 sm:justify-end">
-              <div className="text-right"><p className="font-semibold tabular-nums">{currency.format(record.outstanding)}</p><p className="mt-1 text-xs text-[var(--secondary)]">of {currency.format(record.originalAmount)} outstanding</p></div>
+              <div className="text-right"><p className="font-semibold"><CurrencyAmount amount={record.outstanding} minimumFractionDigits={0} /></p><p className="mt-1 text-xs text-[var(--secondary)]">of <CurrencyAmount amount={record.originalAmount} minimumFractionDigits={0} /> outstanding</p></div>
               <div className="inline-flex shrink-0 items-center rounded-lg border border-[var(--border)] bg-[var(--card)]">
                 <Button
                   variant="ghost"
@@ -321,11 +306,11 @@ export function LendingBorrowingPage() {
                 {repaymentHistoryQuery.data.repayments.map((repayment) => <li key={repayment.id} className="space-y-1.5 py-3 text-sm">
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     <p className="shrink-0 whitespace-nowrap text-xs font-medium sm:text-sm">{formatDate(repayment.repaymentDate)}</p>
-                    <p className="shrink-0 whitespace-nowrap text-right font-semibold tabular-nums">{currency.format(repayment.amount)} <span className="text-[10px] font-normal text-[var(--secondary)] sm:text-xs">principal</span></p>
+                    <p className="shrink-0 whitespace-nowrap text-right font-semibold"><CurrencyAmount amount={repayment.amount} minimumFractionDigits={0} /> <span className="text-[10px] font-normal text-[var(--secondary)] sm:text-xs">principal</span></p>
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-[var(--secondary)]">
                     <span className="min-w-0 truncate">{repayment.accountId ? accountsQuery.data.find((account) => account.id === repayment.accountId)?.name ?? 'Account' : 'Account'}</span>
-                    {repayment.interest > 0 ? <span className="shrink-0 whitespace-nowrap tabular-nums">+ {currency.format(repayment.interest)} interest</span> : null}
+                    {repayment.interest > 0 ? <span className="shrink-0 whitespace-nowrap">+ <CurrencyAmount amount={repayment.interest} minimumFractionDigits={0} /> interest</span> : null}
                   </div>
                   {repayment.notes ? <p className="truncate text-xs text-[var(--secondary)]">{repayment.notes}</p> : null}
                 </li>)}
@@ -333,8 +318,9 @@ export function LendingBorrowingPage() {
               {repaymentHistoryQuery.data && !repaymentHistoryQuery.data.repayments?.length ? <p className="text-sm text-[var(--secondary)]">No repayments recorded yet.</p> : null}
             </div> : null}
           </Card>
-        }) : <Card className="p-8 text-center text-sm text-[var(--secondary)]">{records.length ? 'No records match your search and status filter.' : `No ${lending ? 'lending' : 'borrowing'} records yet.`}</Card>}
+        }) : <Card className="p-8 text-center text-sm text-[var(--secondary)]">{search || statusFilter !== 'ALL' ? 'No records match your search and status filter.' : `No ${lending ? 'lending' : 'borrowing'} records yet.`}</Card>}
       </section>
+      {recordPage ? <PaginationControls page={recordPage.page} totalPages={recordPage.totalPages} total={recordPage.total} limit={recordPage.limit} onPageChange={setPage} /> : null}
 
       {recordToDelete ? <Modal open onClose={() => { if (!deleteRecordMutation.isPending) setRecordToDelete(null) }} title={`Delete ${lending ? 'lending' : 'borrowing'} record?`} className="sm:max-w-md">
         <p className="text-sm leading-6 text-[var(--secondary)]">Delete the record for <span className="font-semibold text-[var(--foreground)]">{'personName' in recordToDelete ? recordToDelete.personName : recordToDelete.lenderName}</span>? This also removes its linked original transaction. Records with repayment history must be kept to preserve the ledger.</p>
@@ -342,7 +328,7 @@ export function LendingBorrowingPage() {
       </Modal> : null}
 
       {selectedRecord && selectedRecordInfo ? <Modal open onClose={() => setSelectedRecord(null)} title={`Record repayment for ${'personName' in selectedRecordInfo ? selectedRecordInfo.personName : selectedRecordInfo.lenderName}`} className="sm:max-w-3xl">
-        <p className="mt-1 text-sm text-[var(--secondary)]">Outstanding: {currency.format(selectedRecordInfo.outstanding)}</p>
+        <p className="mt-1 text-sm text-[var(--secondary)]">Outstanding: <CurrencyAmount amount={selectedRecordInfo.outstanding} minimumFractionDigits={0} /></p>
         <form className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" onSubmit={repaymentForm.handleSubmit((values) => repayMutation.mutate({ id: selectedRecord, values }))} noValidate>
           <label htmlFor="repayment-amount" className="space-y-2 text-sm font-medium">Amount (₹)<Input id="repayment-amount" type="number" min="0.01" step="0.01" {...repaymentForm.register('amount', { valueAsNumber: true })} error={repaymentForm.formState.errors.amount?.message} /></label>
           <label htmlFor="repayment-interest" className="space-y-2 text-sm font-medium">Interest amount (₹)<Input id="repayment-interest" type="number" min="0" step="0.01" {...repaymentForm.register('interestAmount', { valueAsNumber: true })} /></label>

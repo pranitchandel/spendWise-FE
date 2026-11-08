@@ -1,16 +1,19 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, RefreshCw } from 'lucide-react'
+import { Copy, Plus, RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { Link } from 'react-router-dom'
 import { z } from 'zod'
 import { budgetsApi, type BudgetInput } from '@/api/budgets'
 import { getErrorMessage } from '@/api/client'
 import { categoriesApi } from '@/api/categories'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { CurrencyAmount } from '@/components/ui/CurrencyAmount'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { Modal } from '@/components/ui/Modal'
+import { MobileFilterSheet } from '@/components/ui/MobileFilterSheet'
 import { Progress } from '@/components/ui/Progress'
 import { formatMonthYear, currentYearMonth } from '@/lib/date'
 import type { Category } from '@/types'
@@ -21,14 +24,13 @@ const budgetSchema = z.object({
   amounts: z.record(z.string(), z.number().min(0).optional()),
 })
 type BudgetForm = z.infer<typeof budgetSchema>
-const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
-
 export function BudgetsPage() {
   const queryClient = useQueryClient()
   const { showToast } = useToast()
   const addForm = useMobileAddForm()
   const initial = currentYearMonth()
   const [month, setMonth] = useState(`${initial.year}-${String(initial.month).padStart(2, '0')}`)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [pageError, setPageError] = useState('')
   const [yearText, monthText] = month.split('-')
   const year = Number(yearText)
@@ -67,9 +69,15 @@ export function BudgetsPage() {
     onError: (error) => showToast(getErrorMessage(error), 'error'),
   })
   const copyMutation = useMutation({
-    mutationFn: () => budgetsApi.copy({ fromYear: year, fromMonth: monthNumber, toYear: year, toMonth: monthNumber === 12 ? 1 : monthNumber + 1 }),
-    onSuccess: async () => {
+    mutationFn: () => budgetsApi.copy({
+      fromYear: year,
+      fromMonth: monthNumber,
+      toYear: monthNumber === 12 ? year + 1 : year,
+      toMonth: monthNumber === 12 ? 1 : monthNumber + 1,
+    }),
+    onSuccess: async (copiedBudget) => {
       await queryClient.invalidateQueries({ queryKey: ['budget'] })
+      setMonth(`${copiedBudget.year}-${String(copiedBudget.month).padStart(2, '0')}`)
       setPageError('')
       showToast('Budget copied to next month.', 'success')
     },
@@ -99,17 +107,21 @@ export function BudgetsPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><p className="text-sm font-medium text-[var(--primary)]">Plan with intention</p><h2 className="mt-1 text-2xl font-semibold">Monthly budgets</h2></div>
         <div className="flex items-center gap-2">
-          <label htmlFor="budget-month" className="flex items-center gap-3 text-sm font-medium text-[var(--secondary)]">Month<input id="budget-month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-10 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-[var(--foreground)]" /></label>
+          <Link className="hidden lg:block" to="/budgets?add=1"><Button><Plus className="h-4 w-4" />{budget ? 'Edit budget' : 'Set budget'}</Button></Link>
+          <label htmlFor="budget-month-desktop" className="hidden items-center gap-3 text-sm font-medium text-[var(--secondary)] sm:flex">Month<input id="budget-month-desktop" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-10 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-[var(--foreground)]" /></label>
           <Button type="button" variant="outline" size="icon" aria-label="Refresh budget actuals" title="Refresh budget actuals" onClick={() => void budgetQuery.refetch()} disabled={budgetQuery.isFetching}>
             <RefreshCw className={`h-4 w-4 ${budgetQuery.isFetching ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
+      <MobileFilterSheet open={filtersOpen} onOpenChange={setFiltersOpen} activeCount={1}>
+        <label htmlFor="budget-month-mobile" className="block space-y-2 text-sm font-medium">Budget month<input id="budget-month-mobile" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-[var(--foreground)]" /></label>
+      </MobileFilterSheet>
 
       {budget ? <Card className="grid gap-4 p-5 sm:grid-cols-4">
-        <div><p className="text-xs text-[var(--secondary)]">Budget</p><p className="mt-1 text-lg font-semibold">{currency.format(budget.summary.totalBudget)}</p></div>
-        <div><p className="text-xs text-[var(--secondary)]">Spent</p><p className="mt-1 text-lg font-semibold">{currency.format(budget.summary.totalSpent)}</p></div>
-        <div><p className="text-xs text-[var(--secondary)]">Remaining</p><p className="mt-1 text-lg font-semibold">{currency.format(budget.summary.remaining)}</p></div>
+        <div><p className="text-xs text-[var(--secondary)]">Budget</p><p className="mt-1 text-lg font-semibold"><CurrencyAmount amount={budget.summary.totalBudget} minimumFractionDigits={0} maximumFractionDigits={0} /></p></div>
+        <div><p className="text-xs text-[var(--secondary)]">Spent</p><p className="mt-1 text-lg font-semibold"><CurrencyAmount amount={budget.summary.totalSpent} minimumFractionDigits={0} maximumFractionDigits={0} /></p></div>
+        <div><p className="text-xs text-[var(--secondary)]">Remaining</p><p className="mt-1 text-lg font-semibold"><CurrencyAmount amount={budget.summary.remaining} minimumFractionDigits={0} maximumFractionDigits={0} /></p></div>
         <div><p className="text-xs text-[var(--secondary)]">Utilization</p><p className="mt-1 text-lg font-semibold">{budget.summary.utilizationPercent}%</p><Progress value={budget.summary.utilizationPercent} className="mt-2" /></div>
       </Card> : <p className="text-sm text-[var(--secondary)]">No budget is configured for {formatMonthYear(year, monthNumber)}.</p>}
 
@@ -136,7 +148,7 @@ export function BudgetsPage() {
                         <p className="mt-0.5 text-xs text-[var(--secondary)]">{spending.transactionCount} {spending.transactionCount === 1 ? 'expense' : 'expenses'}{budgetItem ? ` · ${budgetItem.utilizationPercent}% of budget` : ' · Relative to highest category'}</p>
                       </div>
                     </div>
-                    <p className="shrink-0 text-sm font-semibold tabular-nums">{currency.format(spending.actualSpent)}</p>
+                    <p className="shrink-0 text-sm font-semibold"><CurrencyAmount amount={spending.actualSpent} minimumFractionDigits={0} maximumFractionDigits={0} /></p>
                   </div>
                   <div
                     className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--muted)]"
@@ -169,11 +181,11 @@ export function BudgetsPage() {
                   {item ? (
                     <>
                       <p className="mt-1 text-xs text-[var(--secondary)]">
-                        {currency.format(item.actualSpent)} spent of {currency.format(item.budgetAmount)} · {item.utilizationPercent}% · {item.transactionCount} {item.transactionCount === 1 ? 'expense' : 'expenses'}
+                        <CurrencyAmount amount={item.actualSpent} minimumFractionDigits={0} maximumFractionDigits={0} /> spent of <CurrencyAmount amount={item.budgetAmount} minimumFractionDigits={0} maximumFractionDigits={0} /> · {item.utilizationPercent}% · {item.transactionCount} {item.transactionCount === 1 ? 'expense' : 'expenses'}
                       </p>
                       <Progress value={item.utilizationPercent} className="mt-2 max-w-md" />
                       <p className={`mt-1 text-xs ${item.overBudget > 0 ? 'text-[var(--danger)]' : 'text-[var(--secondary)]'}`}>
-                        {item.overBudget > 0 ? `${currency.format(item.overBudget)} over budget` : `${currency.format(Math.max(0, item.remaining))} remaining`}
+                        {item.overBudget > 0 ? <><CurrencyAmount amount={item.overBudget} minimumFractionDigits={0} maximumFractionDigits={0} /> over budget</> : <><CurrencyAmount amount={Math.max(0, item.remaining)} minimumFractionDigits={0} maximumFractionDigits={0} /> remaining</>}
                       </p>
                     </>
                   ) : <p className="mt-1 text-xs text-[var(--secondary)]">No limit set</p>}

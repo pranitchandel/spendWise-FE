@@ -3,10 +3,10 @@ import { BarChart3, TrendingDown, TrendingUp } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { transactionsApi } from '@/api/transactions'
 import { Card } from '@/components/ui/Card'
+import { CurrencyAmount } from '@/components/ui/CurrencyAmount'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { currentYearMonth, formatMonthYear } from '@/lib/date'
-
-const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
+import { formatINR } from '@/lib/money'
 
 function recentMonths() {
   const current = currentYearMonth()
@@ -45,9 +45,9 @@ export function StatisticsPage() {
     <div className="space-y-6">
       <div><p className="text-sm font-medium text-[var(--primary)]">Actual ledger activity</p><h2 className="mt-1 text-2xl font-semibold">Statistics</h2><p className="mt-1 text-sm text-[var(--secondary)]">Monthly income and expense totals from the last six months.</p></div>
       <section className="grid gap-3 sm:grid-cols-3" aria-label="Six month totals">
-        <Card className="p-5"><div className="flex items-center justify-between text-sm text-[var(--secondary)]"><span>Income</span><TrendingUp className="h-4 w-4 text-[var(--success)]" /></div><p className="mt-4 text-2xl font-semibold tabular-nums">{currency.format(income)}</p></Card>
-        <Card className="p-5"><div className="flex items-center justify-between text-sm text-[var(--secondary)]"><span>Expenses</span><TrendingDown className="h-4 w-4 text-[var(--danger)]" /></div><p className="mt-4 text-2xl font-semibold tabular-nums">{currency.format(expenses)}</p></Card>
-        <Card className="p-5"><div className="flex items-center justify-between text-sm text-[var(--secondary)]"><span>Income minus expenses</span><BarChart3 className="h-4 w-4 text-[var(--primary)]" /></div><p className="mt-4 text-2xl font-semibold tabular-nums">{currency.format(net)}</p></Card>
+        <Card className="p-5"><div className="flex items-center justify-between text-sm text-[var(--secondary)]"><span>Income</span><TrendingUp className="h-4 w-4 text-[var(--success)]" /></div><p className="mt-4 text-2xl font-semibold"><CurrencyAmount amount={income} minimumFractionDigits={0} maximumFractionDigits={0} /></p></Card>
+        <Card className="p-5"><div className="flex items-center justify-between text-sm text-[var(--secondary)]"><span>Expenses</span><TrendingDown className="h-4 w-4 text-[var(--danger)]" /></div><p className="mt-4 text-2xl font-semibold"><CurrencyAmount amount={expenses} minimumFractionDigits={0} maximumFractionDigits={0} /></p></Card>
+        <Card className="p-5"><div className="flex items-center justify-between text-sm text-[var(--secondary)]"><span>Income minus expenses</span><BarChart3 className="h-4 w-4 text-[var(--primary)]" /></div><p className="mt-4 text-2xl font-semibold"><CurrencyAmount amount={net} minimumFractionDigits={0} maximumFractionDigits={0} /></p></Card>
       </section>
       <Card className="p-4 sm:p-6">
         <div className="mb-5"><h3 className="font-semibold">Income vs expenses</h3><p className="mt-1 text-xs text-[var(--secondary)]">Each point is a complete calendar month.</p></div>
@@ -56,8 +56,8 @@ export function StatisticsPage() {
             <BarChart data={statsQuery.data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke="var(--border)" vertical={false} />
               <XAxis dataKey="label" tick={{ fill: 'var(--secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: 'var(--secondary)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value: number) => `₹${value >= 1000 ? `${Math.round(value / 1000)}k` : value}`} />
-              <Tooltip formatter={(value) => currency.format(Number(value))} />
+              <YAxis width={84} tick={{ fill: 'var(--secondary)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value: number) => formatINR(value, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} />
+              <Tooltip formatter={(value) => formatINR(Number(value), { minimumFractionDigits: 0, maximumFractionDigits: 0 })} />
               <Legend />
               <Bar dataKey="income" name="Income" fill="#16876a" radius={[4, 4, 0, 0]} />
               <Bar dataKey="expenses" name="Expenses" fill="#df674f" radius={[4, 4, 0, 0]} />
@@ -65,7 +65,7 @@ export function StatisticsPage() {
           </ResponsiveContainer>
         </div>
       </Card>
-      {latest ? <Card className="flex flex-wrap items-center justify-between gap-3 p-5"><div><h3 className="font-semibold">{formatMonthYear(latest.year, latest.month)}</h3><p className="mt-1 text-sm text-[var(--secondary)]">Monthly surplus: {currency.format(latest.savings)}</p></div><a href={`/transactions?from=${latest.year}-${String(latest.month).padStart(2, '0')}-01`} className="text-sm font-medium text-[var(--primary)] hover:underline">Open transaction ledger</a></Card> : null}
+      {latest ? <Card className="flex flex-wrap items-center justify-between gap-3 p-5"><div><h3 className="font-semibold">{formatMonthYear(latest.year, latest.month)}</h3><p className="mt-1 text-sm text-[var(--secondary)]">Monthly surplus: <CurrencyAmount amount={latest.savings} minimumFractionDigits={0} maximumFractionDigits={0} /></p></div><a href={`/transactions?from=${latest.year}-${String(latest.month).padStart(2, '0')}-01`} className="text-sm font-medium text-[var(--primary)] hover:underline">Open transaction ledger</a></Card> : null}
     </div>
   )
 }

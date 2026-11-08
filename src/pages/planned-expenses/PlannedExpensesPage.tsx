@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ban, CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, EllipsisVertical, Pencil, Plus, ReceiptText, RotateCcw, Trash2, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { useFieldArray, useForm } from 'react-hook-form'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
 import { accountsApi } from '@/api/accounts'
 import { categoriesApi } from '@/api/categories'
@@ -13,13 +13,16 @@ import { transactionsApi } from '@/api/transactions'
 import { useToast } from '@/contexts/ToastContext'
 import { useMobileAddForm } from '@/hooks/useMobileAddForm'
 import { formatDate, todayISO } from '@/lib/date'
-import { formatINR } from '@/lib/money'
 import type { PaymentMode, PlannedExpense, PlannedExpenseStatus } from '@/types'
+import { PlannedIncomesPanel } from './PlannedIncomesPanel'
+import { PlannedCashflowPanel } from './PlannedCashflowPanel'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { CurrencyAmount } from '@/components/ui/CurrencyAmount'
 import { Input } from '@/components/ui/Input'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { Modal } from '@/components/ui/Modal'
+import { PaginationControls } from '@/components/ui/PaginationControls'
 
 const paymentModes = ['UPI', 'DEBIT_CARD', 'CREDIT_CARD', 'CASH', 'BANK_TRANSFER', 'NET_BANKING', 'OTHER'] as const
 const campaignSchema = z.object({
@@ -30,6 +33,7 @@ const campaignSchema = z.object({
     id: z.string().optional(),
     name: z.string().trim().min(1, 'Name this estimate line'),
     categoryId: z.string().min(1, 'Choose a category'),
+    accountId: z.string().optional(),
     estimatedAmount: z.number().positive('Estimate must be greater than zero'),
   })).min(1, 'Add at least one estimate line'),
 })
@@ -62,15 +66,22 @@ export function PlannedExpensesPage() {
   const queryClient = useQueryClient()
   const { showToast } = useToast()
   const addForm = useMobileAddForm()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [editingCampaign, setEditingCampaign] = useState<PlannedExpense | null>(null)
   const [campaignToDelete, setCampaignToDelete] = useState<PlannedExpense | null>(null)
   const [spendTarget, setSpendTarget] = useState<SpendTarget | null>(null)
   const [spendToDelete, setSpendToDelete] = useState<SpendTarget | null>(null)
   const [spendActionsId, setSpendActionsId] = useState<string | null>(null)
   const [campaignActionsId, setCampaignActionsId] = useState<string | null>(null)
+  const activeView = (searchParams.get('view') as 'expenses' | 'income' | 'cashflow' | null) ?? 'expenses'
   const [activeStatus, setActiveStatus] = useState<PlannedExpenseStatus>('PLANNED')
+  const [campaignPage, setCampaignPage] = useState(1)
   const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set())
-  const campaignsQuery = useQuery({ queryKey: ['planned-expenses'], queryFn: plannedExpensesApi.list })
+  const campaignsQuery = useQuery({
+    queryKey: ['planned-expenses', activeStatus, campaignPage],
+    queryFn: () => plannedExpensesApi.listPage({ status: activeStatus, page: campaignPage, limit: 20 }),
+    placeholderData: (previous) => previous,
+  })
   const categoriesQuery = useQuery({
     queryKey: ['categories', 'expense'],
     queryFn: () => categoriesApi.list({ type: 'EXPENSE' }),
@@ -80,7 +91,7 @@ export function PlannedExpensesPage() {
     resolver: zodResolver(campaignSchema),
     defaultValues: {
       name: '', dueDate: '', notes: '',
-      items: [{ name: '', categoryId: '', estimatedAmount: undefined }],
+      items: [{ name: '', categoryId: '', accountId: '', estimatedAmount: undefined }],
     },
   })
   const itemFields = useFieldArray({ control: campaignForm.control, name: 'items' })
@@ -185,20 +196,21 @@ export function PlannedExpensesPage() {
     return <div role="alert" className="text-sm text-[var(--danger)]">Expense campaigns couldn’t be loaded.</div>
   }
 
-  const activeCampaigns = campaignsQuery.data.filter((campaign) => campaign.status === 'PLANNED')
+  const campaigns = campaignsQuery.data.items
+  const activeCampaigns = campaigns.filter((campaign) => campaign.status === 'PLANNED')
   const totals = activeCampaigns.reduce((summary, campaign) => ({
     estimated: summary.estimated + campaign.summary.estimatedAmount,
     spent: summary.spent + campaign.summary.spentAmount,
     remaining: summary.remaining + campaign.summary.remainingAmount,
   }), { estimated: 0, spent: 0, remaining: 0 })
-  const visibleCampaigns = campaignsQuery.data.filter((campaign) => campaign.status === activeStatus)
+  const visibleCampaigns = campaigns
   const availableCategories = categoriesQuery.data.filter((category) => !category.isArchived)
   const availableAccounts = accountsQuery.data.filter((account) => !account.isArchived && account.isActive)
 
   function resetCampaignForm() {
     campaignForm.reset({
       name: '', dueDate: '', notes: '',
-      items: [{ name: '', categoryId: '', estimatedAmount: undefined }],
+      items: [{ name: '', categoryId: '', accountId: '', estimatedAmount: undefined }],
     })
   }
 
@@ -213,6 +225,14 @@ export function PlannedExpensesPage() {
     resetCampaignForm()
   }
 
+  function selectView(view: 'expenses' | 'income' | 'cashflow') {
+    const next = new URLSearchParams(searchParams)
+    next.set('view', view)
+    next.delete('add')
+    next.delete('addIncome')
+    setSearchParams(next, { replace: true })
+  }
+
   function editCampaign(campaign: PlannedExpense) {
     addForm.close()
     setEditingCampaign(campaign)
@@ -224,6 +244,7 @@ export function PlannedExpensesPage() {
         id: item.id,
         name: item.name,
         categoryId: item.categoryId ?? '',
+        accountId: item.accountId ?? '',
         estimatedAmount: item.estimatedAmount,
       })),
     })
@@ -237,7 +258,7 @@ export function PlannedExpensesPage() {
     spendForm.reset({
       amount: transaction?.amount,
       transactionDate: transaction?.date ?? todayISO(),
-      accountId: transaction?.accountId ?? '',
+      accountId: transaction?.accountId ?? item.accountId ?? '',
       paymentMode: transaction?.paymentMode ?? 'UPI',
       note: transaction?.note ?? '',
     })
@@ -275,22 +296,25 @@ export function PlannedExpensesPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-[var(--primary)]">Plan and track actuals</p>
-          <h2 className="mt-1 text-2xl font-semibold">Expense campaigns</h2>
+          <h2 className="mt-1 text-2xl font-semibold">{activeView === 'expenses' ? 'Planned expenses' : activeView === 'income' ? 'Planned income' : 'Cash-flow plan'}</h2>
         </div>
-        <Link to="/planned-expenses?add=1" onClick={openAddCampaign}>
-          <Button><Plus className="h-4 w-4" />New campaign</Button>
-        </Link>
+        {activeView === 'expenses' ? <Link className="hidden lg:block" to="/planned-expenses?view=expenses&add=1" onClick={openAddCampaign}><Button><Plus className="h-4 w-4" />New campaign</Button></Link> : null}
       </div>
 
+      <div className="flex w-full gap-1 rounded-lg border border-[var(--border)] bg-[var(--muted)] p-1 sm:inline-flex sm:w-auto" role="tablist" aria-label="Planning views">
+        {[{ value: 'expenses', label: 'Expenses' }, { value: 'income', label: 'Income' }, { value: 'cashflow', label: 'Cash flow' }].map((tab) => <button key={tab.value} type="button" role="tab" aria-selected={activeView === tab.value} onClick={() => selectView(tab.value as typeof activeView)} className={`flex-1 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors ${activeView === tab.value ? 'bg-[var(--primary)] text-white shadow-sm' : 'bg-[var(--card)]/60 text-[var(--secondary)] hover:text-[var(--foreground)]'}`}>{tab.label}</button>)}
+      </div>
+
+      {activeView === 'income' ? <PlannedIncomesPanel /> : activeView === 'cashflow' ? <PlannedCashflowPanel /> : <>
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card className="p-4"><p className="text-sm text-[var(--secondary)]">Active campaign estimates</p><p className="mt-2 text-xl font-semibold tabular-nums">{formatINR(totals.estimated)}</p></Card>
-        <Card className="p-4"><p className="text-sm text-[var(--secondary)]">Actual spend</p><p className="mt-2 text-xl font-semibold tabular-nums">{formatINR(totals.spent)}</p></Card>
-        <Card className="p-4"><p className="text-sm text-[var(--secondary)]">Estimate remaining</p><p className={`mt-2 text-xl font-semibold tabular-nums ${totals.remaining < 0 ? 'text-[var(--danger)]' : ''}`}>{formatINR(totals.remaining)}</p></Card>
+        <Card className="p-4"><p className="text-sm text-[var(--secondary)]">Active campaign estimates</p><p className="mt-2 text-xl font-semibold"><CurrencyAmount amount={totals.estimated} /></p></Card>
+        <Card className="p-4"><p className="text-sm text-[var(--secondary)]">Actual spend</p><p className="mt-2 text-xl font-semibold"><CurrencyAmount amount={totals.spent} /></p></Card>
+        <Card className="p-4"><p className="text-sm text-[var(--secondary)]">Estimate remaining</p><p className={`mt-2 text-xl font-semibold ${totals.remaining < 0 ? 'text-[var(--danger)]' : ''}`}><CurrencyAmount amount={totals.remaining} /></p></Card>
       </div>
 
-      <div className="inline-flex max-w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] p-1" role="tablist" aria-label="Campaign status">
+      <div className="flex w-full gap-1 rounded-lg border border-[var(--border)] bg-[var(--muted)] p-1 sm:inline-flex sm:w-auto" role="tablist" aria-label="Campaign status">
         {statusTabs.map((tab) => (
-          <button key={tab.value} type="button" role="tab" aria-selected={activeStatus === tab.value} onClick={() => setActiveStatus(tab.value)} className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${activeStatus === tab.value ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm' : 'text-[var(--secondary)] hover:text-[var(--foreground)]'}`}>
+          <button key={tab.value} type="button" role="tab" aria-selected={activeStatus === tab.value} onClick={() => { setActiveStatus(tab.value); setCampaignPage(1) }} className={`flex-1 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors ${activeStatus === tab.value ? 'bg-[var(--primary)] text-white shadow-sm' : 'bg-[var(--card)]/60 text-[var(--secondary)] hover:text-[var(--foreground)]'}`}>
             {tab.label}
           </button>
         ))}
@@ -355,9 +379,9 @@ export function PlannedExpensesPage() {
                 </div>
                 <div className="mt-4 flex w-full items-center gap-2 border-t border-[var(--border)] pt-3">
                   <div className="grid min-w-0 flex-1 grid-cols-3 gap-2 text-right">
-                    <div className="min-w-0"><p className="text-[11px] text-[var(--secondary)]">Planned</p><p className="mt-1 break-words text-xs font-semibold tabular-nums sm:text-sm">{formatINR(campaign.summary.estimatedAmount)}</p></div>
-                    <div className="min-w-0"><p className="text-[11px] text-[var(--secondary)]">Spent</p><p className="mt-1 break-words text-xs font-semibold tabular-nums sm:text-sm">{formatINR(campaign.summary.spentAmount)}</p></div>
-                    <div className="min-w-0"><p className="text-[11px] text-[var(--secondary)]">Left</p><p className={`mt-1 break-words text-xs font-semibold tabular-nums sm:text-sm ${campaign.summary.remainingAmount < 0 ? 'text-[var(--danger)]' : ''}`}>{formatINR(campaign.summary.remainingAmount)}</p></div>
+                    <div className="min-w-0"><p className="text-[11px] text-[var(--secondary)]">Planned</p><p className="mt-1 text-xs font-semibold sm:text-sm"><CurrencyAmount amount={campaign.summary.estimatedAmount} /></p></div>
+                    <div className="min-w-0"><p className="text-[11px] text-[var(--secondary)]">Spent</p><p className="mt-1 text-xs font-semibold sm:text-sm"><CurrencyAmount amount={campaign.summary.spentAmount} /></p></div>
+                    <div className="min-w-0"><p className="text-[11px] text-[var(--secondary)]">Left</p><p className={`mt-1 text-xs font-semibold sm:text-sm ${campaign.summary.remainingAmount < 0 ? 'text-[var(--danger)]' : ''}`}><CurrencyAmount amount={campaign.summary.remainingAmount} /></p></div>
                   </div>
                   <Button
                     size="icon"
@@ -384,9 +408,9 @@ export function PlannedExpensesPage() {
                             <p className="mt-1 text-xs text-[var(--secondary)]">{item.categoryName ?? 'Uncategorized'}</p>
                           </div>
                           <div className="grid grid-cols-3 gap-2 xl:grid-cols-3 xl:items-center xl:gap-4">
-                            <div className="min-w-0"><p className="text-xs text-[var(--secondary)]">Estimate</p><p className="mt-1 truncate text-sm font-semibold tabular-nums">{formatINR(item.estimatedAmount)}</p></div>
-                            <div className="min-w-0"><p className="text-xs text-[var(--secondary)]">Actual</p><p className="mt-1 truncate text-sm font-semibold tabular-nums">{formatINR(item.spentAmount)}</p></div>
-                            <div className="min-w-0"><p className="text-xs text-[var(--secondary)]">Remaining</p><p className={`mt-1 truncate text-sm font-semibold tabular-nums ${item.remainingAmount < 0 ? 'text-[var(--danger)]' : ''}`}>{formatINR(item.remainingAmount)}</p></div>
+                                <div className="min-w-0"><p className="text-xs text-[var(--secondary)]">Estimate</p><p className="mt-1 text-sm font-semibold"><CurrencyAmount amount={item.estimatedAmount} /></p></div>
+                                  <div className="min-w-0"><p className="text-xs text-[var(--secondary)]">Actual</p><p className="mt-1 text-sm font-semibold"><CurrencyAmount amount={item.spentAmount} /></p></div>
+                                  <div className="min-w-0"><p className="text-xs text-[var(--secondary)]">Remaining</p><p className={`mt-1 text-sm font-semibold ${item.remainingAmount < 0 ? 'text-[var(--danger)]' : ''}`}><CurrencyAmount amount={item.remainingAmount} /></p></div>
                           </div>
                         </div>
                         {campaign.status === 'PLANNED' ? <Button size="sm" className="justify-center flex-nowrap gap-2 whitespace-nowrap px-4 sm:w-[15rem]" onClick={() => openSpend(campaign, item)}><ReceiptText className="h-4 w-4 shrink-0" /><span className="shrink-0 whitespace-nowrap">Record spend</span></Button> : null}
@@ -399,7 +423,7 @@ export function PlannedExpensesPage() {
                             {item.transactions.map((transaction) => (
                               <li key={transaction.id} className={`grid items-center gap-2 py-2.5 text-xs ${campaign.status === 'PLANNED' ? 'grid-cols-[minmax(0,1fr)_auto_auto]' : 'grid-cols-[minmax(0,1fr)_auto]'}`}>
                                 <span className="inline-flex min-w-0 items-center gap-2 text-[var(--secondary)]"><Wallet className="h-3.5 w-3.5 shrink-0" /><span className="min-w-0 truncate">{formatDate(transaction.date)}{transaction.note ? ` · ${transaction.note}` : ''}</span></span>
-                                <span className="shrink-0 text-right font-medium tabular-nums">{formatINR(transaction.amount - transaction.refundedAmount)}{transaction.refundedAmount ? <span className="ml-1 text-[var(--secondary)]">(refund {formatINR(transaction.refundedAmount)})</span> : null}</span>
+                                <span className="shrink-0 text-right font-medium"><CurrencyAmount amount={transaction.amount - transaction.refundedAmount} />{transaction.refundedAmount ? <span className="ml-1 text-[var(--secondary)]">(refund <CurrencyAmount amount={transaction.refundedAmount} />)</span> : null}</span>
                                 {campaign.status === 'PLANNED' ? <div className="relative">
                                   <Button
                                     size="icon"
@@ -432,7 +456,7 @@ export function PlannedExpensesPage() {
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-2xl border-t border-[var(--border)] bg-[var(--muted)]/50 px-4 py-3 text-sm sm:px-5">
                     <span className="font-medium">Campaign utilization</span>
-                    <span className={campaign.summary.spendingPercent > 100 ? 'font-semibold text-[var(--danger)]' : 'font-semibold'}>{campaign.summary.spendingPercent}%{campaign.summary.overBudgetAmount > 0 ? ` · ${formatINR(campaign.summary.overBudgetAmount)} over estimate` : ''}</span>
+                    <span className={campaign.summary.spendingPercent > 100 ? 'font-semibold text-[var(--danger)]' : 'font-semibold'}>{campaign.summary.spendingPercent}%{campaign.summary.overBudgetAmount > 0 ? <> · <CurrencyAmount amount={campaign.summary.overBudgetAmount} /> over estimate</> : ''}</span>
                   </div>
                 </div>
               ) : null}
@@ -449,18 +473,20 @@ export function PlannedExpensesPage() {
             <label htmlFor="campaign-notes" className="space-y-2 text-sm font-medium sm:col-span-2">Notes<textarea id="campaign-notes" rows={2} className={`${fieldClass} h-auto py-2`} {...campaignForm.register('notes')} /></label>
           </div>
           <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">Estimate lines</h3><Button type="button" size="sm" variant="outline" onClick={() => itemFields.append({ name: '', categoryId: '', estimatedAmount: 0 })}><Plus className="h-4 w-4" />Add line</Button></div>
+            <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">Estimate lines</h3><Button type="button" size="sm" variant="outline" onClick={() => itemFields.append({ name: '', categoryId: '', accountId: '', estimatedAmount: 0 })}><Plus className="h-4 w-4" />Add line</Button></div>
             {campaignForm.formState.errors.items?.root?.message ? <p role="alert" className="text-xs text-[var(--danger)]">{campaignForm.formState.errors.items.root.message}</p> : null}
             {itemFields.fields.map((field, index) => (
-              <div key={field.id} className="grid gap-3 rounded-lg border border-[var(--border)] p-3 sm:grid-cols-[1.2fr_1fr_1fr_auto] sm:items-end">
+              <div key={field.id} className="grid gap-3 rounded-lg border border-[var(--border)] p-3 sm:grid-cols-2 xl:grid-cols-[1.2fr_1fr_1fr_1fr_auto] xl:items-end">
                 <input type="hidden" {...campaignForm.register(`items.${index}.id`)} />
                 <label htmlFor={`campaign-item-name-${index}`} className="space-y-2 text-xs font-medium">Expense item<Input id={`campaign-item-name-${index}`} placeholder="Travel, gift, outfit…" {...campaignForm.register(`items.${index}.name`)} error={campaignForm.formState.errors.items?.[index]?.name?.message} /></label>
                 <label htmlFor={`campaign-item-category-${index}`} className="space-y-2 text-xs font-medium">Category<select id={`campaign-item-category-${index}`} className={fieldClass} {...campaignForm.register(`items.${index}.categoryId`)}><option value="">Select category</option>{availableCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>{campaignForm.formState.errors.items?.[index]?.categoryId?.message ? <span className="text-xs text-[var(--danger)]">{campaignForm.formState.errors.items[index]?.categoryId?.message}</span> : null}</label>
+                <label htmlFor={`campaign-item-account-${index}`} className="space-y-2 text-xs font-medium">Forecast account (optional)<select id={`campaign-item-account-${index}`} className={fieldClass} {...campaignForm.register(`items.${index}.accountId`)}><option value="">Not assigned</option>{availableAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
                 <label htmlFor={`campaign-item-amount-${index}`} className="space-y-2 text-xs font-medium">Estimate (₹)<Input id={`campaign-item-amount-${index}`} type="number" min="0.01" step="0.01" {...campaignForm.register(`items.${index}.estimatedAmount`, { valueAsNumber: true })} error={campaignForm.formState.errors.items?.[index]?.estimatedAmount?.message} /></label>
                 <Button type="button" size="icon" variant="ghost" disabled={itemFields.fields.length < 2} onClick={() => itemFields.remove(index)} aria-label={`Remove estimate line ${index + 1}`}><Trash2 className="h-4 w-4 text-[var(--danger)]" /></Button>
               </div>
             ))}
           </div>
+          <p className="text-xs leading-5 text-[var(--secondary)]">Assign an account to include this estimate in that account’s projected balance. Unassigned expenses still affect the overall forecast but cannot be attributed to an individual account.</p>
           <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={closeCampaignForm}>Cancel</Button><Button type="submit" disabled={saveMutation.isPending}>{saveMutation.isPending ? 'Saving…' : editingCampaign ? 'Save changes' : 'Create campaign'}</Button></div>
         </form>
       </Modal>
@@ -480,7 +506,7 @@ export function PlannedExpensesPage() {
       </Modal>
 
       {spendToDelete?.transaction ? <Modal open onClose={() => { if (!deleteSpendMutation.isPending) setSpendToDelete(null) }} title="Delete spend record?" className="sm:max-w-md">
-        <p className="text-sm leading-6 text-[var(--secondary)]">This will delete the <span className="font-semibold text-[var(--foreground)]">{formatINR(spendToDelete.transaction.amount)}</span> transaction from <span className="font-semibold text-[var(--foreground)]">{spendToDelete.campaign.name} / {spendToDelete.itemName}</span>. The campaign actuals and account balance will be recalculated.</p>
+        <p className="text-sm leading-6 text-[var(--secondary)]">This will delete the <span className="font-semibold text-[var(--foreground)]"><CurrencyAmount amount={spendToDelete.transaction.amount} /></span> transaction from <span className="font-semibold text-[var(--foreground)]">{spendToDelete.campaign.name} / {spendToDelete.itemName}</span>. The campaign actuals and account balance will be recalculated.</p>
         <div className="mt-6 flex justify-end gap-3"><Button variant="outline" disabled={deleteSpendMutation.isPending} onClick={() => setSpendToDelete(null)}>Keep record</Button><Button variant="danger" disabled={deleteSpendMutation.isPending || spendToDelete.transaction.refundedAmount > 0} onClick={() => deleteSpendMutation.mutate(spendToDelete.transaction!.id)}>{deleteSpendMutation.isPending ? 'Deleting…' : 'Delete record'}</Button></div>
       </Modal> : null}
 
@@ -488,6 +514,8 @@ export function PlannedExpensesPage() {
         <p className="text-sm leading-6 text-[var(--secondary)]">Delete <span className="font-semibold text-[var(--foreground)]">{campaignToDelete.name}</span>? Campaigns with recorded transactions must be cancelled instead so their ledger links remain intact.</p>
         <div className="mt-6 flex justify-end gap-3"><Button variant="outline" disabled={deleteMutation.isPending} onClick={() => setCampaignToDelete(null)}>Keep campaign</Button><Button variant="danger" disabled={deleteMutation.isPending || campaignToDelete.summary.transactionCount > 0} onClick={() => deleteMutation.mutate(campaignToDelete.id)}>{deleteMutation.isPending ? 'Deleting…' : 'Delete campaign'}</Button></div>
       </Modal> : null}
+      <PaginationControls page={campaignsQuery.data.page} totalPages={campaignsQuery.data.totalPages} total={campaignsQuery.data.total} limit={campaignsQuery.data.limit} onPageChange={setCampaignPage} />
+      </>}
     </div>
   )
 }

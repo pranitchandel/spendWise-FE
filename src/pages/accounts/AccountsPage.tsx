@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Landmark, Pencil, Plus, RotateCcw, Trash2, WalletCards } from 'lucide-react'
+import { Archive, Landmark, Pencil, Plus, RotateCcw, WalletCards } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
@@ -9,9 +9,12 @@ import { accountsApi, type AccountInput } from '@/api/accounts'
 import { getErrorMessage } from '@/api/client'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { CurrencyAmount } from '@/components/ui/CurrencyAmount'
 import { Input } from '@/components/ui/Input'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { Modal } from '@/components/ui/Modal'
+import { MobileFilterSheet } from '@/components/ui/MobileFilterSheet'
+import { PaginationControls } from '@/components/ui/PaginationControls'
 import { todayISO } from '@/lib/date'
 import { useMobileAddForm } from '@/hooks/useMobileAddForm'
 import { useToast } from '@/contexts/ToastContext'
@@ -26,8 +29,6 @@ const accountSchema = z.object({
   openingBalanceDate: z.string().min(1, 'Choose an opening date'),
 })
 type AccountForm = z.infer<typeof accountSchema>
-const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
-
 function emptyAccountForm(): AccountForm {
   return { name: '', type: 'SAVINGS', institutionName: '', maskedIdentifier: '', openingBalance: 0, openingBalanceDate: todayISO() }
 }
@@ -37,9 +38,14 @@ export function AccountsPage() {
   const { showToast } = useToast()
   const addForm = useMobileAddForm()
   const [includeArchived, setIncludeArchived] = useState(false)
+  const [page, setPage] = useState(1)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<Awaited<ReturnType<typeof accountsApi.get>> | null>(null)
-  const [accountToDelete, setAccountToDelete] = useState<Awaited<ReturnType<typeof accountsApi.get>> | null>(null)
-  const accountsQuery = useQuery({ queryKey: ['accounts', includeArchived], queryFn: () => accountsApi.list({ includeArchived }) })
+  const accountsQuery = useQuery({
+    queryKey: ['accounts', includeArchived, page],
+    queryFn: () => accountsApi.listPage({ includeArchived, page, limit: 20 }),
+    placeholderData: (previous) => previous,
+  })
   const form = useForm<AccountForm>({
     resolver: zodResolver(accountSchema),
     defaultValues: emptyAccountForm(),
@@ -71,16 +77,6 @@ export function AccountsPage() {
     },
     onError: (error) => showToast(getErrorMessage(error), 'error'),
   })
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => accountsApi.permanentlyDelete(id),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['accounts'] })
-      setAccountToDelete(null)
-      showToast('Account permanently deleted.', 'success')
-    },
-    onError: (error) => showToast(getErrorMessage(error), 'error'),
-  })
-
   if (accountsQuery.isLoading) return <LoadingState label="Loading accounts…" />
   if (accountsQuery.isError || !accountsQuery.data) return <div role="alert" className="text-sm text-[var(--danger)]">Accounts couldn’t be loaded.</div>
 
@@ -117,14 +113,20 @@ export function AccountsPage() {
     <div className="space-y-7">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><p className="text-sm font-medium text-[var(--primary)]">Your money</p><h2 className="mt-1 text-2xl font-semibold">Accounts</h2></div>
-        <Link to="/accounts?add=1" onClick={openAddForm}><Button><Plus className="h-4 w-4" />Add account</Button></Link>
+        <Link className="hidden lg:block" to="/accounts?add=1" onClick={openAddForm}><Button><Plus className="h-4 w-4" />Add account</Button></Link>
       </div>
-      <label className="flex items-center gap-2 text-sm text-[var(--secondary)]">
-        <input type="checkbox" checked={includeArchived} onChange={(event) => setIncludeArchived(event.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+      <label className="hidden items-center gap-2 text-sm text-[var(--secondary)] sm:flex">
+        <input type="checkbox" checked={includeArchived} onChange={(event) => { setIncludeArchived(event.target.checked); setPage(1) }} className="h-4 w-4 accent-[var(--primary)]" />
         Show archived accounts
       </label>
+      <MobileFilterSheet open={filtersOpen} onOpenChange={setFiltersOpen} activeCount={Number(includeArchived)}>
+        <label className="flex items-center gap-2 text-sm text-[var(--secondary)]">
+          <input type="checkbox" checked={includeArchived} onChange={(event) => { setIncludeArchived(event.target.checked); setPage(1) }} className="h-4 w-4 accent-[var(--primary)]" />
+          Show archived accounts
+        </label>
+      </MobileFilterSheet>
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Accounts and current balances">
-        {accountsQuery.data.map((account) => (
+        {accountsQuery.data.items.map((account) => (
           <Card key={account.id} className="p-5">
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
@@ -133,20 +135,20 @@ export function AccountsPage() {
               </div>
               <span className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase ${account.isActive ? 'bg-green-50 text-green-700' : 'bg-[var(--muted)] text-[var(--secondary)]'}`}>{account.isActive ? 'Active' : 'Inactive'}</span>
             </div>
-            <p className="mt-6 text-2xl font-semibold tabular-nums">{currency.format(account.balance ?? account.openingBalance)}</p>
+            <p className="mt-6 text-2xl font-semibold"><CurrencyAmount amount={account.balance ?? account.openingBalance} minimumFractionDigits={0} /></p>
             <p className="mt-1 text-xs text-[var(--secondary)]">Current balance</p>
             <div className="mt-4 flex gap-2 border-t border-[var(--border)] pt-3">
               <Button size="sm" variant="outline" onClick={() => editAccount(account)}><Pencil className="h-4 w-4" />Edit</Button>
               {account.isArchived ? (
                 <Button size="sm" variant="outline" onClick={() => void accountsApi.update(account.id, { isArchived: false, isActive: true }).then(async () => { await queryClient.invalidateQueries({ queryKey: ['accounts'] }); showToast('Account restored.', 'success') }).catch((error: unknown) => showToast(getErrorMessage(error), 'error'))}><RotateCcw className="h-4 w-4" />Restore</Button>
               ) : (
-                <Button size="sm" variant="outline" onClick={() => archiveMutation.mutate(account)} disabled={archiveMutation.isPending}><Archive className="h-4 w-4" />Archive</Button>
+                <Button size="sm" variant="outline" title="Soft delete: archive the account and retain its balances and history" onClick={() => archiveMutation.mutate(account)} disabled={archiveMutation.isPending}><Archive className="h-4 w-4" />Archive</Button>
               )}
-              <Button size="sm" variant="ghost" onClick={() => setAccountToDelete(account)} disabled={deleteMutation.isPending} aria-label={`Delete ${account.name} account`}><Trash2 className="h-4 w-4 text-[var(--danger)]" />Delete</Button>
             </div>
           </Card>
         ))}
       </section>
+      <PaginationControls page={accountsQuery.data.page} totalPages={accountsQuery.data.totalPages} total={accountsQuery.data.total} limit={accountsQuery.data.limit} onPageChange={setPage} />
 
       <Modal open={addForm.isOpen || !!editingAccount} onClose={closeForm} title={editingAccount ? 'Edit account' : 'Add an account'} className="sm:max-w-2xl">
           <form className="grid gap-4 sm:grid-cols-2" onSubmit={form.handleSubmit(submit)} noValidate>
@@ -159,19 +161,6 @@ export function AccountsPage() {
             <div className="flex justify-end gap-2 sm:col-span-2"><Button type="button" variant="outline" onClick={closeForm}>Cancel</Button><Button type="submit" disabled={saveMutation.isPending}>{saveMutation.isPending ? 'Saving…' : editingAccount ? 'Save changes' : 'Save account'}</Button></div>
           </form>
       </Modal>
-      {accountToDelete ? (
-        <Modal open onClose={() => { if (!deleteMutation.isPending) setAccountToDelete(null) }} title="Delete account permanently?" className="sm:max-w-md">
-          <p className="text-sm leading-6 text-[var(--secondary)]">
-            Permanently delete <span className="font-semibold text-[var(--foreground)]">{accountToDelete.name}</span> and its opening balance? Accounts with transactions, schedules, or repayment records must be archived instead.
-          </p>
-          <div className="mt-6 flex justify-end gap-3">
-            <Button variant="outline" disabled={deleteMutation.isPending} onClick={() => setAccountToDelete(null)}>Cancel</Button>
-            <Button variant="danger" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(accountToDelete.id)}>
-              {deleteMutation.isPending ? 'Deleting…' : 'Delete account'}
-            </Button>
-          </div>
-        </Modal>
-      ) : null}
     </div>
   )
 }

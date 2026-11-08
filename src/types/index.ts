@@ -149,6 +149,11 @@ export interface Transaction {
   plannedExpenseId?: string | null
   plannedExpenseItemId?: string | null
   plannedExpenseStatus?: 'PLANNED' | 'COMPLETED' | 'CANCELLED' | null
+  savingsGoalId?: string | null
+  savingsAllocationId?: string | null
+  savingsMovementDirection?: 'DEPOSIT' | 'WITHDRAWAL' | null
+  plannedIncomeId?: string | null
+  plannedIncomeOccurrenceDate?: string | null
   interest?: number
   isCreditCardBillPayment?: boolean
   createdAt: string
@@ -195,6 +200,53 @@ export interface MonthlyBudget {
   }
   createdAt?: string
   updatedAt?: string
+}
+
+export type SavingsOptionType = 'BANK_SAVINGS' | 'RECURRING_DEPOSIT' | 'FIXED_DEPOSIT' | 'PPF' | 'MUTUAL_FUND' | 'OTHER'
+export type SavingsCompoundingFrequency = 'MONTHLY' | 'QUARTERLY' | 'HALF_YEARLY' | 'YEARLY'
+export type SavingsGoalStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED'
+
+export interface SavingsMovement {
+  id: string
+  amount: number
+  date: string
+  direction: 'DEPOSIT' | 'WITHDRAWAL'
+  note: string
+  sourceAccountId: string
+  destinationAccountId: string | null
+}
+
+export interface SavingsAllocation {
+  id: string
+  name: string
+  optionType: SavingsOptionType
+  currentBalance: number
+  expectedAnnualReturnRate: number
+  compoundingFrequency: SavingsCompoundingFrequency
+  monthlyContribution: number
+  projectedBalance: number
+  projectedContributions: number
+  projectedGrowth: number
+  movements: SavingsMovement[]
+}
+
+export interface SavingsGoal {
+  id: string
+  name: string
+  targetAmount: number
+  targetDate: string
+  notes: string
+  status: SavingsGoalStatus
+  monthsUntilTarget: number
+  currentBalance: number
+  projectedBalance: number
+  projectedGrowth: number
+  monthlyContribution: number
+  targetGap: number
+  progressPercent: number
+  allocations: SavingsAllocation[]
+  createdAt: string
+  updatedAt: string
 }
 
 export interface LendingRecord {
@@ -307,6 +359,8 @@ export interface PlannedExpenseItem {
   name: string
   categoryId: string | null
   categoryName: string | null
+  accountId: string | null
+  accountName: string | null
   estimatedAmount: number
   spentAmount: number
   remainingAmount: number
@@ -330,6 +384,34 @@ export interface PlannedExpense {
     spendingPercent: number
     transactionCount: number
   }
+  createdAt: string
+  updatedAt: string
+}
+
+export type PlannedIncomeFrequency = 'ONCE' | 'MONTHLY'
+export type PlannedIncomeStatus = 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+
+export interface PlannedIncomeActual {
+  id: string
+  scheduledDate: string
+  actualDate: string
+  amount: number
+  accountId: string
+  paymentMode: PaymentMode
+}
+
+export interface PlannedIncome {
+  id: string
+  name: string
+  amount: number
+  accountId: string
+  accountName: string
+  startDate: string
+  frequency: PlannedIncomeFrequency
+  endDate: string | null
+  status: PlannedIncomeStatus
+  notes: string
+  actuals: PlannedIncomeActual[]
   createdAt: string
   updatedAt: string
 }

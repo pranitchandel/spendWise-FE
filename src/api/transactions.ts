@@ -1,5 +1,5 @@
 import { api, unwrap } from './client'
-import type { Paginated, PaymentMode, Transaction, TransactionFilters, TransactionType } from '@/types'
+import type { ApiSuccess, Paginated, PaymentMode, Transaction, TransactionFilters, TransactionType } from '@/types'
 
 export interface TransactionInput {
   amount: number
@@ -51,6 +51,22 @@ function normalizeList(
 }
 
 export const transactionsApi = {
+  listPage(filters: TransactionFilters = {}) {
+    const params = Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value !== '' && value !== undefined),
+    )
+    return api.get<ApiSuccess<Transaction[]>>('/transactions', { params }).then(({ data }) => {
+      const pagination = data.meta?.pagination as Partial<Paginated<Transaction>> | undefined
+      return {
+        items: data.data,
+        page: pagination?.page ?? Number(filters.page ?? 1),
+        limit: pagination?.limit ?? Number(filters.limit ?? 20),
+        total: pagination?.total ?? data.data.length,
+        totalPages: pagination?.totalPages ?? 1,
+      }
+    })
+  },
+
   async list(filters: TransactionFilters = {}) {
     const params = Object.fromEntries(
       Object.entries(filters).filter(([, value]) => value !== '' && value !== undefined),

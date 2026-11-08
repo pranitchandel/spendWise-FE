@@ -11,9 +11,12 @@ import { categoriesApi } from '@/api/categories'
 import { recurringApi, type RecurringInput } from '@/api/recurring'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { CurrencyAmount } from '@/components/ui/CurrencyAmount'
 import { Input } from '@/components/ui/Input'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { Modal } from '@/components/ui/Modal'
+import { MobileFilterSheet } from '@/components/ui/MobileFilterSheet'
+import { PaginationControls } from '@/components/ui/PaginationControls'
 import { todayISO, formatDate } from '@/lib/date'
 import type { PaymentMode, RecurringFrequency, RecurringRule, TransactionType } from '@/types'
 import { useMobileAddForm } from '@/hooks/useMobileAddForm'
@@ -37,7 +40,6 @@ const schema = z.object({
   endDate: z.string().optional(),
 })
 type RuleForm = z.infer<typeof schema>
-const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
 const fieldClass = 'h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)]'
 
 export function RecurringPage() {
@@ -48,7 +50,13 @@ export function RecurringPage() {
   const [editingRule, setEditingRule] = useState<RecurringRule | null>(null)
   const [ruleToDelete, setRuleToDelete] = useState<RecurringRule | null>(null)
   const [showInactive, setShowInactive] = useState(false)
-  const rulesQuery = useQuery({ queryKey: ['recurring'], queryFn: recurringApi.list })
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [page, setPage] = useState(1)
+  const rulesQuery = useQuery({
+    queryKey: ['recurring', showInactive, page],
+    queryFn: () => recurringApi.listPage({ page, limit: 20, includeInactive: showInactive }),
+    placeholderData: (previous) => previous,
+  })
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: () => accountsApi.list() })
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: () => categoriesApi.list() })
   const form = useForm<RuleForm>({
@@ -147,22 +155,28 @@ export function RecurringPage() {
     form.reset({ name: '', type: 'EXPENSE', amount: undefined, frequency: 'MONTHLY', categoryId: '', accountId: '', toAccountId: '', paymentMode: 'UPI', description: '', notes: '', startDate: todayISO(), endDate: '' })
   }
 
-  const visibleRules = rulesQuery.data.filter((rule) => showInactive || rule.isActive)
-  const pendingCount = rulesQuery.data.filter((rule) => rule.isActive).reduce((total, rule) => total + (rule.occurrences?.filter((item) => item.status === 'PENDING').length ?? 0), 0)
+  const visibleRules = rulesQuery.data.items
+  const pendingCount = visibleRules.filter((rule) => rule.isActive).reduce((total, rule) => total + (rule.occurrences?.filter((item) => item.status === 'PENDING').length ?? 0), 0)
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><p className="text-sm font-medium text-[var(--primary)]">Scheduled, never auto-paid</p><h2 className="mt-1 text-2xl font-semibold">Recurring payments</h2></div>
         <div className="flex flex-wrap gap-2">
-          <Link to="/recurring?add=1" onClick={openAddForm}><Button><Plus className="h-4 w-4" />Add schedule</Button></Link>
+          <Link className="hidden lg:block" to="/recurring?add=1" onClick={openAddForm}><Button><Plus className="h-4 w-4" />Add schedule</Button></Link>
           <Button variant="outline" onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}><CalendarClock className="h-4 w-4" />{generateMutation.isPending ? 'Checking due dates…' : `Generate due entries${pendingCount ? ` (${pendingCount} pending)` : ''}`}</Button>
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-[var(--secondary)]">
-        <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+      <label className="hidden items-center gap-2 text-sm text-[var(--secondary)] sm:flex">
+        <input type="checkbox" checked={showInactive} onChange={(event) => { setShowInactive(event.target.checked); setPage(1) }} className="h-4 w-4 accent-[var(--primary)]" />
         Show inactive schedules
       </label>
+      <MobileFilterSheet open={filtersOpen} onOpenChange={setFiltersOpen} activeCount={Number(showInactive)}>
+        <label className="flex items-center gap-2 text-sm text-[var(--secondary)]">
+          <input type="checkbox" checked={showInactive} onChange={(event) => { setShowInactive(event.target.checked); setPage(1) }} className="h-4 w-4 accent-[var(--primary)]" />
+          Show inactive schedules
+        </label>
+      </MobileFilterSheet>
 
       <Modal open={addForm.isOpen || !!editingRule} onClose={closeForm} title={editingRule ? 'Edit recurring schedule' : 'Add a schedule'} className="sm:max-w-3xl">
         <form className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" onSubmit={form.handleSubmit(submit)} noValidate>
@@ -201,11 +215,14 @@ export function RecurringPage() {
           const category = categoriesQuery.data.find((item) => item.id === rule.categoryId)?.name ?? 'Category'
           const account = accountsQuery.data.find((item) => item.id === rule.accountId)?.name ?? 'Account'
           return <Card key={rule.id} className="overflow-hidden p-0">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-              <div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[var(--muted)] text-[var(--primary)]"><Clock3 className="h-5 w-5" /></div><div className="min-w-0"><p className="truncate font-semibold">{rule.name}</p><p className="mt-1 truncate text-xs text-[var(--secondary)]">{rule.frequency.replaceAll('_', ' ').toLowerCase()} · {category} · {account}</p></div></div>
-              <div className="flex flex-wrap items-center justify-end gap-4">
-                <div className="text-right"><p className="font-semibold tabular-nums">{currency.format(rule.amount)}</p><p className="mt-1 text-xs text-[var(--secondary)]">{rule.isActive ? `Next: ${formatDate(rule.nextDueDate)}` : 'Inactive'}</p></div>
-                <div className="flex items-center gap-1">
+              <div className="grid gap-3 p-4 sm:flex sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:py-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[var(--muted)] text-[var(--primary)]"><Clock3 className="h-5 w-5" /></div>
+                <div className="min-w-0"><p className="break-words font-semibold leading-5">{rule.name}</p><p className="mt-1 break-words text-xs text-[var(--secondary)]">{rule.frequency.replaceAll('_', ' ').toLowerCase()} · {category} · {account}</p></div>
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-[var(--border)] pt-3 sm:flex sm:border-0 sm:pt-0">
+                <div className="min-w-0 sm:text-right"><p className="text-lg font-semibold sm:text-base"><CurrencyAmount amount={rule.amount} minimumFractionDigits={0} /></p><p className="mt-0.5 text-xs text-[var(--secondary)]">{rule.isActive ? `Next: ${formatDate(rule.nextDueDate)}` : 'Inactive'}</p></div>
+                <div className="flex shrink-0 items-center justify-end gap-1">
                   <Button size="sm" variant="ghost" onClick={() => editRule(rule)} aria-label={`Edit ${rule.name}`}><Pencil className="h-4 w-4" />Edit</Button>
                   {rule.isActive ? (
                     <Button size="sm" variant="ghost" onClick={() => setRuleToDelete(rule)} disabled={deleteMutation.isPending} aria-label={`Delete ${rule.name}`}><Trash2 className="h-4 w-4 text-[var(--danger)]" />Delete</Button>
@@ -217,7 +234,7 @@ export function RecurringPage() {
             </div>
             {rule.occurrences?.length ? <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
               {rule.occurrences.map((occurrence) => <li key={occurrence.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-                <div><p className="text-sm font-medium">{formatDate(occurrence.dueDate)} · {currency.format(occurrence.amount)}</p><p className="mt-0.5 text-xs text-[var(--secondary)]">{occurrence.status.toLowerCase()}{occurrence.postponedTo ? ` · moved to ${formatDate(occurrence.postponedTo)}` : ''}</p></div>
+                <div><p className="text-sm font-medium">{formatDate(occurrence.dueDate)} · <CurrencyAmount amount={occurrence.amount} minimumFractionDigits={0} /></p><p className="mt-0.5 text-xs text-[var(--secondary)]">{occurrence.status.toLowerCase()}{occurrence.postponedTo ? ` · moved to ${formatDate(occurrence.postponedTo)}` : ''}</p></div>
                 {occurrence.status === 'PENDING' ? <div className="flex flex-wrap items-center gap-2">
                   <Button size="sm" variant="success" onClick={() => actionMutation.mutate({ ruleId: rule.id, occurrenceId: occurrence.id, action: 'PAID', accountId: rule.accountId, paymentMode: rule.paymentMode })} disabled={actionMutation.isPending}><Check className="h-4 w-4" />Paid</Button>
                   <Button size="sm" variant="outline" onClick={() => actionMutation.mutate({ ruleId: rule.id, occurrenceId: occurrence.id, action: 'SKIPPED' })} disabled={actionMutation.isPending}><SkipForward className="h-4 w-4" />Skip</Button>
@@ -229,6 +246,7 @@ export function RecurringPage() {
           </Card>
         }) : <Card className="p-8 text-center text-sm text-[var(--secondary)]">{showInactive ? 'No recurring schedules found.' : 'No active schedules. Enable “Show inactive schedules” to review canceled schedules.'}</Card>}
       </section>
+      <PaginationControls page={rulesQuery.data.page} totalPages={rulesQuery.data.totalPages} total={rulesQuery.data.total} limit={rulesQuery.data.limit} onPageChange={setPage} />
     </div>
   )
 }

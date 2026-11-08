@@ -13,21 +13,37 @@ export function toRupees(paise: number): number {
 }
 
 /** Format a rupee amount as INR. */
-export function formatINR(rupees: number, options?: { compact?: boolean }): string {
+export function formatINR(rupees: number, options?: {
+  minimumFractionDigits?: number
+  maximumFractionDigits?: number
+}): string {
   if (!Number.isFinite(rupees)) return '₹0.00'
-  if (options?.compact && Math.abs(rupees) >= 100000) {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      notation: 'compact',
-      maximumFractionDigits: 2,
-    }).format(rupees)
-  }
+  const maximumFractionDigits = options?.maximumFractionDigits ?? 2
+  const minimumFractionDigits = Math.min(options?.minimumFractionDigits ?? 2, maximumFractionDigits)
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits,
+    maximumFractionDigits,
+  }).format(rupees)
+}
+
+/** Return compact INR only when its displayed precision preserves the exact amount. */
+export function formatCompactINR(rupees: number, maximumFractionDigits = 2): string | null {
+  if (!Number.isFinite(rupees) || Math.abs(rupees) < 10000) return null
+
+  const absoluteAmount = Math.abs(rupees)
+  const compactScale = absoluteAmount >= 10000000 ? 10000000 : absoluteAmount >= 100000 ? 100000 : 1000
+  const compactPrecision = 10 ** maximumFractionDigits
+  const roundedCompactUnits = Math.round((absoluteAmount / compactScale) * compactPrecision) / compactPrecision
+  if (Math.round(roundedCompactUnits * compactScale * 100) !== Math.round(absoluteAmount * 100)) return null
+
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    notation: 'compact',
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
   }).format(rupees)
 }
 

@@ -1,5 +1,6 @@
 import { api, unwrap } from './client'
 import type {
+  Paginated,
   PaymentMode,
   RecurringFrequency,
   RecurringRule,
@@ -34,6 +35,10 @@ export const recurringApi = {
     return unwrap<RecurringRule[]>(api.get('/recurring')).then((data) =>
       Array.isArray(data) ? data : [],
     )
+  },
+
+  listPage(params: { page: number; limit: number; includeInactive?: boolean }) {
+    return unwrap<Paginated<RecurringRule>>(api.get('/recurring', { params }))
   },
 
   create(input: RecurringInput) {

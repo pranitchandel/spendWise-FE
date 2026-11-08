@@ -16,6 +16,7 @@ const titles: Record<string, string> = {
   '/accounts': 'Accounts',
   '/recurring': 'Recurring',
   '/planned-expenses': 'Planned expenses',
+  '/savings': 'Savings',
   '/settings': 'Settings',
   '/settings/categories': 'Categories',
   '/settings/profile': 'Profile',
@@ -33,10 +34,18 @@ function resolveTitle(pathname: string) {
 
 export function AppLayout() {
   const location = useLocation()
+  const searchParams = new URLSearchParams(location.search)
+  const plannedView = searchParams.get('view') ?? 'expenses'
   const addTarget =
     location.pathname === '/dashboard' || location.pathname === '/transactions'
       ? '/transactions?add=1'
-      : ['/accounts', '/budgets', '/lending', '/borrowing', '/recurring', '/planned-expenses'].includes(location.pathname)
+      : location.pathname === '/planned-expenses'
+        ? plannedView === 'income'
+          ? '/planned-expenses?view=income&addIncome=1'
+          : plannedView === 'cashflow'
+            ? null
+            : '/planned-expenses?view=expenses&add=1'
+      : ['/accounts', '/budgets', '/lending', '/borrowing', '/recurring', '/savings', '/settings/categories'].includes(location.pathname)
         ? `${location.pathname}?add=1`
         : null
   const hideFab = !addTarget || location.pathname.startsWith('/transactions/new')
@@ -58,7 +67,7 @@ export function AppLayout() {
         <Link
           to={addTarget}
           className={cn(
-            'fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)] text-white shadow-lg transition hover:opacity-90 lg:bottom-8 lg:right-8',
+            'fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary)] text-white shadow-lg transition hover:opacity-90 lg:hidden',
           )}
           aria-label={
             location.pathname === '/accounts'
@@ -67,8 +76,14 @@ export function AppLayout() {
                 ? 'Add category budget'
                 : location.pathname === '/recurring'
                   ? 'Add recurring schedule'
-                  : location.pathname === '/planned-expenses'
-                    ? 'Add planned expense'
+                    : location.pathname === '/savings'
+                        ? 'Create savings goal'
+                      : location.pathname === '/settings/categories'
+                        ? 'Add category'
+                      : location.pathname === '/planned-expenses' && plannedView === 'income'
+                        ? 'Add income plan'
+                      : location.pathname === '/planned-expenses'
+                        ? 'Add planned expense'
                   : location.pathname === '/lending' || location.pathname === '/borrowing'
                     ? 'Add lending or borrowing record'
                     : 'Add transaction'

@@ -12,10 +12,14 @@ export interface AccountInput {
 }
 
 export const accountsApi = {
-  list(params?: { includeArchived?: boolean }) {
-    return unwrap<Account[] | Paginated<Account>>(api.get('/accounts', { params })).then((data) =>
+  list(params: { includeArchived?: boolean; page?: number; limit?: number } = {}) {
+    return unwrap<Account[] | Paginated<Account>>(api.get('/accounts', { params: { page: 1, limit: 100, ...params } })).then((data) =>
       Array.isArray(data) ? data : data.items,
     )
+  },
+
+  listPage(params: { includeArchived?: boolean; page: number; limit: number }) {
+    return unwrap<Paginated<Account>>(api.get('/accounts', { params }))
   },
 
   get(id: string) {
@@ -32,10 +36,6 @@ export const accountsApi = {
 
   remove(id: string) {
     return unwrap<{ id: string } | void>(api.delete(`/accounts/${id}`))
-  },
-
-  permanentlyDelete(id: string) {
-    return unwrap<{ id: string }>(api.delete(`/accounts/${id}/permanent`))
   },
 
   balance(id: string) {

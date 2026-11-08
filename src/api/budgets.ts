@@ -14,9 +14,11 @@ export interface BudgetInput {
 
 export const budgetsApi = {
   list(params?: { year?: number }) {
-    return unwrap<MonthlyBudget[]>(api.get('/budgets', { params })).then((data) =>
-      Array.isArray(data) ? data : [],
-    )
+    return unwrap<MonthlyBudget[] | { items: MonthlyBudget[] }>(api.get('/budgets', { params: { ...params, page: 1, limit: 100 } })).then((data) => Array.isArray(data) ? data : data.items)
+  },
+
+  listPage(params: { year?: number; page: number; limit: number }) {
+    return unwrap<{ items: MonthlyBudget[]; page: number; limit: number; total: number; totalPages: number }>(api.get('/budgets', { params }))
   },
 
   getMonth(year: number, month: number) {

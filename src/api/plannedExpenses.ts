@@ -1,10 +1,10 @@
 import { api, unwrap } from './client'
-import type { PlannedExpense } from '@/types'
+import type { Paginated, PlannedExpense } from '@/types'
 
 export interface PlannedExpenseInput {
   name: string
   dueDate?: string | null
-  items: Array<{ id?: string; name: string; categoryId: string; estimatedAmount: number }>
+  items: Array<{ id?: string; name: string; categoryId: string; accountId?: string | null; estimatedAmount: number }>
   status?: PlannedExpense['status']
   notes?: string
 }
@@ -21,9 +21,11 @@ export interface CampaignSpendInput {
 
 export const plannedExpensesApi = {
   list() {
-    return unwrap<PlannedExpense[]>(api.get('/planned-expenses')).then((data) =>
-      Array.isArray(data) ? data : [],
-    )
+    return unwrap<Paginated<PlannedExpense>>(api.get('/planned-expenses', { params: { page: 1, limit: 100 } })).then((data) => data.items)
+  },
+
+  listPage(params: { page: number; limit: number; status?: PlannedExpense['status'] }) {
+    return unwrap<Paginated<PlannedExpense>>(api.get('/planned-expenses', { params }))
   },
 
   create(input: PlannedExpenseInput) {

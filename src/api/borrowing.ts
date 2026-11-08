@@ -19,11 +19,17 @@ export interface BorrowingInput {
   notes?: string
 }
 
+export interface BorrowingListPage extends Paginated<BorrowingRecord> {
+  totalOutstanding: number
+}
+
 export const borrowingApi = {
   list(params?: { status?: string; page?: number; limit?: number }) {
-    return unwrap<BorrowingRecord[] | Paginated<BorrowingRecord>>(
-      api.get('/borrowing', { params }),
-    ).then((data) => (Array.isArray(data) ? data : data.items))
+    return unwrap<Paginated<BorrowingRecord>>(api.get('/borrowing', { params }))
+  },
+
+  listPage(params: { status?: string; search?: string; page: number; limit: number }) {
+    return unwrap<BorrowingListPage>(api.get('/borrowing', { params }))
   },
 
   get(id: string) {

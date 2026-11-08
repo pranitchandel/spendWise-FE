@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, EllipsisVertical, Flag, LockKeyhole, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, EllipsisVertical, Flag, LockKeyhole, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -11,14 +11,16 @@ import { categoriesApi } from '@/api/categories'
 import { transactionsApi, type TransactionInput } from '@/api/transactions'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { CurrencyAmount } from '@/components/ui/CurrencyAmount'
 import { Input } from '@/components/ui/Input'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { Modal } from '@/components/ui/Modal'
+import { MobileFilterSheet } from '@/components/ui/MobileFilterSheet'
+import { PaginationControls } from '@/components/ui/PaginationControls'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDate } from '@/lib/date'
 import type { CategoryType, Transaction, TransactionType } from '@/types'
 
-const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
 const transactionTypes = [
   'EXPENSE', 'INCOME', 'LENDING', 'BORROWING', 'LENDING_REPAYMENT',
   'BORROWING_REPAYMENT', 'TRANSFER', 'REFUND',
@@ -33,6 +35,14 @@ const categoryType: Record<TransactionType, CategoryType> = {
   BORROWING_REPAYMENT: 'BORROWING',
   TRANSFER: 'TRANSFER',
   REFUND: 'EXPENSE',
+}
+function formatAccountFlowDetails(transaction: Transaction, accountNames: Map<string, string>) {
+  const accountName = accountNames.get(transaction.accountId) ?? 'Account'
+  if (transaction.type !== 'TRANSFER') return accountName
+  if (transaction.savingsMovementDirection === 'DEPOSIT') return `${accountName} → Savings goal`
+  if (transaction.savingsMovementDirection === 'WITHDRAWAL') return `Savings goal → ${accountName}`
+  const destinationName = transaction.toAccountId ? accountNames.get(transaction.toAccountId) ?? 'Account' : 'Account'
+  return `${accountName} → ${destinationName}`
 }
 
 const transactionSchema = z.object({
@@ -126,9 +136,16 @@ export function TransactionsPage() {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState(search)
   const [type, setType] = useState<TransactionType | ''>('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+  const [draftFromDate, setDraftFromDate] = useState('')
+  const [draftToDate, setDraftToDate] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [page, setPage] = useState(1)
   const [searchParams, setSearchParams] = useSearchParams()
   const addOpen = searchParams.get('add') === '1'
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [viewingTransaction, setViewingTransaction] = useState<Transaction | null>(null)
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null)
   const [mobileActionsId, setMobileActionsId] = useState<string | null>(null)
   const queryClient = useQueryClient()
@@ -145,8 +162,9 @@ export function TransactionsPage() {
   }, [search])
 
   const transactionsQuery = useQuery({
-    queryKey: ['transactions', debouncedSearch, type],
-    queryFn: () => transactionsApi.list({ page: 1, limit: 100, search: debouncedSearch, type }),
+    queryKey: ['transactions', debouncedSearch, type, fromDate, toDate, page],
+    queryFn: () => transactionsApi.listPage({ page, limit: 20, search: debouncedSearch, type, from: fromDate, to: toDate }),
+    placeholderData: keepPreviousData,
   })
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: () => accountsApi.list() })
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: () => categoriesApi.list({ includeArchived: true }) })
@@ -172,6 +190,40 @@ export function TransactionsPage() {
     ;(days[transaction.transactionDate] ??= []).push(transaction)
     return days
   }, {})
+  const activeFilterCount = Number(Boolean(fromDate)) + Number(Boolean(toDate))
+
+  function renderTypeFilter(id: string, className = '') {
+    return <div className={`min-w-0 ${className}`}>
+      <label htmlFor={id} className="sr-only">Filter by transaction type</label>
+       <select id={id} value={type} onChange={(event) => { setType(event.target.value as TransactionType | ''); setPage(1) }} className="h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] py-2 pl-3 text-sm text-[var(--foreground)]">
+        <option value="">All types</option>
+        {transactionTypes.map((option) => <option key={option} value={option}>{option.replaceAll('_', ' ')}</option>)}
+      </select>
+    </div>
+  }
+
+  function renderDateFilters(idPrefix: string, startDate: string, endDate: string, updateStartDate: (value: string) => void, updateEndDate: (value: string) => void) {
+    return <div className="flex flex-wrap items-end gap-3">
+      <label htmlFor={`${idPrefix}-transaction-from`} className="space-y-1 text-xs font-medium text-[var(--secondary)]">From date
+        <Input id={`${idPrefix}-transaction-from`} type="date" value={startDate} max={endDate || undefined} onChange={(event) => { updateStartDate(event.target.value); setPage(1) }} className="h-10" />
+      </label>
+      <label htmlFor={`${idPrefix}-transaction-to`} className="space-y-1 text-xs font-medium text-[var(--secondary)]">To date
+        <Input id={`${idPrefix}-transaction-to`} type="date" value={endDate} min={startDate || undefined} onChange={(event) => { updateEndDate(event.target.value); setPage(1) }} className="h-10" />
+      </label>
+      {startDate || endDate ? <Button type="button" size="sm" variant="ghost" onClick={() => { updateStartDate(''); updateEndDate(''); setPage(1) }}><X className="h-4 w-4" />Clear dates</Button> : null}
+    </div>
+  }
+
+  function handleMobileFiltersOpenChange(open: boolean) {
+    if (open) {
+      setDraftFromDate(fromDate)
+      setDraftToDate(toDate)
+    } else {
+      setDraftFromDate(fromDate)
+      setDraftToDate(toDate)
+    }
+    setFiltersOpen(open)
+  }
 
   function closeAddModal() {
     const nextParams = new URLSearchParams(searchParams)
@@ -183,18 +235,23 @@ export function TransactionsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><p className="text-sm font-medium text-[var(--primary)]">Ledger</p><h2 className="mt-1 text-2xl font-semibold">Transactions</h2></div>
-        <Link to="/transactions?add=1"><Button><Plus className="h-4 w-4" />Add transaction</Button></Link>
+        <Link className="hidden lg:block" to="/transactions?add=1"><Button><Plus className="h-4 w-4" />Add transaction</Button></Link>
       </div>
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <label className="relative min-w-0 flex-1" htmlFor="transaction-search">
+      <div className="space-y-3">
+        <label className="relative block min-w-0" htmlFor="transaction-search">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--secondary)]" />
-          <Input id="transaction-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search description, note, or tag" className="pl-9" />
+          <Input id="transaction-search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="Search description, note, or tag" className="pl-9" />
         </label>
-        <label htmlFor="transaction-type" className="sr-only">Filter by transaction type</label>
-        <select id="transaction-type" value={type} onChange={(event) => setType(event.target.value as TransactionType | '')} className="h-11 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)]">
-          <option value="">All types</option>
-          {transactionTypes.map((option) => <option key={option} value={option}>{option.replaceAll('_', ' ')}</option>)}
-        </select>
+        <div className="flex w-full items-center gap-2 sm:hidden">
+          {renderTypeFilter('transaction-type-mobile', 'w-full flex-1')}
+          <MobileFilterSheet open={filtersOpen} onOpenChange={handleMobileFiltersOpenChange} onApply={() => { setFromDate(draftFromDate); setToDate(draftToDate) }} activeCount={activeFilterCount} iconOnly>
+            {renderDateFilters('mobile', draftFromDate, draftToDate, setDraftFromDate, setDraftToDate)}
+          </MobileFilterSheet>
+        </div>
+        <div className="hidden items-end gap-3 sm:flex">
+          {renderTypeFilter('transaction-type-desktop')}
+          {renderDateFilters('desktop', fromDate, toDate, setFromDate, setToDate)}
+        </div>
       </div>
       {transactionsQuery.data.items.length === 0 ? (
         <Card className="px-6 py-16 text-center">
@@ -205,81 +262,75 @@ export function TransactionsPage() {
       ) : Object.entries(grouped).map(([date, items]) => (
         <section key={date}>
           <div className="mb-2 flex items-center justify-between px-1"><h3 className="text-sm font-semibold">{formatDate(date)}</h3><span className="text-xs text-[var(--secondary)]">{items.length} {items.length === 1 ? 'entry' : 'entries'}</span></div>
-          <Card className="divide-y divide-[var(--border)] overflow-hidden">
+          <Card className="divide-y divide-[var(--border)] overflow-visible rounded-xl p-0 shadow-none">
             {items.map((transaction) => (
-              <article key={transaction.id} className="relative">
-                <div className="flex align-items-start gap-2 px-3 py-3 md:hidden">
-                  <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${transactionIconBackground(transaction.type)} ${transactionColor(transaction.type)}`}>
-                    {isCredit(transaction.type) ? <ArrowDownLeft className="h-4 w-4" /> : transaction.type === 'TRANSFER' ? <ArrowLeftRight className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="break-words text-sm font-semibold leading-5">{transaction.description || transaction.type.replaceAll('_', ' ').toLowerCase()}</p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className={`text-[13px] font-semibold tabular-nums ${transactionColor(transaction.type)}`}>{isCredit(transaction.type) ? '+' : transaction.type === 'TRANSFER' ? '' : '−'}{money.format(transaction.amount)}</p>
-                    <p className="mt-0.5 text-[10px] font-semibold uppercase text-[var(--secondary)]">{transaction.type.replaceAll('_', ' ')}</p>
-                  </div>
-                  {!campaignLocksTransaction(transaction) ? <div className="relative shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-10 w-9"
-                      aria-label={`Actions for ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`}
-                      aria-expanded={mobileActionsId === transaction.id}
-                      aria-haspopup="menu"
-                      onClick={() => setMobileActionsId((current) => current === transaction.id ? null : transaction.id)}
-                    >
-                      <EllipsisVertical className="h-5 w-5" />
-                    </Button>
-                    {mobileActionsId === transaction.id ? (
-                      <div role="menu" className="absolute right-0 top-full z-20 mt-1 flex w-40 flex-col rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-xl">
-                        <Button role="menuitem" variant="ghost" className="min-h-11 justify-start" onClick={() => { setEditingTransaction(transaction); setMobileActionsId(null) }}><Pencil className="h-4 w-4" />Edit</Button>
-                        <Button role="menuitem" variant="ghost" className="min-h-11 justify-start text-[var(--danger)]" disabled={deleteMutation.isPending} onClick={() => { setTransactionToDelete(transaction); setMobileActionsId(null) }}><Trash2 className="h-4 w-4" />Delete</Button>
-                      </div>
-                    ) : null}
-                  </div> : null}
-                </div>
-                <div className="ml-14 flex flex-col items-start gap-1.5 pb-3 pr-12 md:hidden">
-                  <span className="max-w-full break-words rounded-md bg-[var(--muted)] py-1 text-xs font-medium leading-4 text-[var(--foreground)]">
-                    {categoryNames.get(transaction.categoryId) ?? 'Uncategorized'}
-                  </span>
-                  {transaction.type === 'TRANSFER' ? (
-                    <p className="flex max-w-full flex-wrap items-center gap-x-1 break-words text-xs leading-4 text-[var(--secondary)]">
-                      <span>{accountNames.get(transaction.accountId) ?? 'Account'}</span>
-                      <ArrowRight className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span>{transaction.toAccountId ? accountNames.get(transaction.toAccountId) ?? 'Account' : 'Account'}</span>
-                    </p>
-                  ) : (
-                    <p className="break-words text-xs leading-4 text-[var(--secondary)]">{accountNames.get(transaction.accountId) ?? 'Account'}</p>
-                  )}
-                  <div className="flex max-w-full flex-wrap items-center gap-1.5">
-                    <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[11px] leading-4 text-[var(--secondary)]">
-                      {transaction.paymentMode.replaceAll('_', ' ')}
-                    </span>
-                    <CampaignTransactionBadge transaction={transaction} />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 px-4 py-4 sm:px-5 max-md:hidden">
+              <article key={transaction.id} className={`relative ${mobileActionsId === transaction.id ? 'z-30' : ''}`}>
+                <div className="flex min-h-[100px] items-start gap-2 px-3 py-3 md:hidden">
                   <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${transactionIconBackground(transaction.type)} ${transactionColor(transaction.type)}`}>
-                    {isCredit(transaction.type) ? <ArrowDownLeft className="h-4 w-4" /> : transaction.type === 'TRANSFER' ? <ArrowLeftRight className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+                    {isCredit(transaction.type) ? <ArrowDownLeft className="h-5 w-5" /> : transaction.type === 'TRANSFER' ? <ArrowLeftRight className="h-5 w-5" /> : <ArrowUpRight className="h-5 w-5" />}
                   </div>
-                  <div className="flex min-w-0 flex-1 flex-col items-start"><p className="max-w-full truncate text-sm font-medium">{transaction.description || transaction.type.replaceAll('_', ' ').toLowerCase()}</p><div className="mt-1 flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1"><p className="min-w-0 truncate text-xs text-[var(--secondary)]">{categoryNames.get(transaction.categoryId) ?? 'Uncategorized'} · {accountNames.get(transaction.accountId) ?? 'Account'} · {transaction.paymentMode.replaceAll('_', ' ')}</p><CampaignTransactionBadge transaction={transaction} /></div></div>
-                  <div className="shrink-0 text-right"><p className={`text-sm font-semibold tabular-nums ${transactionColor(transaction.type)}`}>{isCredit(transaction.type) ? '+' : transaction.type === 'TRANSFER' ? '' : '−'}{money.format(transaction.amount)}</p><p className="mt-1 text-[10px] font-semibold uppercase text-[var(--secondary)]">{transaction.type.replaceAll('_', ' ')}</p></div>
-                  {!campaignLocksTransaction(transaction) ? <div className="flex shrink-0 items-center gap-1">
-                    <Button variant="ghost" size="icon" aria-label={`Edit ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`} onClick={() => setEditingTransaction(transaction)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" aria-label={`Delete ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`} disabled={deleteMutation.isPending} onClick={() => setTransactionToDelete(transaction)}><Trash2 className="h-4 w-4 text-[var(--danger)]" /></Button>
+                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setViewingTransaction(transaction)} aria-label={`View ${transaction.description || transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`}>
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words text-[15px] font-semibold leading-5">{transaction.description || transaction.type.replaceAll('_', ' ').toLowerCase()}</p>
+                        <p className="mt-0.5 truncate text-xs text-[var(--secondary)]">{categoryNames.get(transaction.categoryId) ?? 'Uncategorized'}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className={`text-[17px] font-semibold ${transactionColor(transaction.type)}`}>{isCredit(transaction.type) ? '+' : transaction.type === 'TRANSFER' ? '' : '−'}<CurrencyAmount amount={transaction.amount} minimumFractionDigits={0} /></p>
+                        <p className="mt-0.5 text-[10px] font-semibold uppercase text-[var(--secondary)]">{transaction.type.replaceAll('_', ' ')}</p>
+                      </div>
+                    </div>
+                    <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 border-t border-[var(--border)] pt-2">
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-semibold uppercase text-[var(--secondary)]">Source</p>
+                        <p className="truncate text-xs text-[var(--secondary)]">{formatAccountFlowDetails(transaction, accountNames)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[9px] font-semibold uppercase text-[var(--secondary)]">Payment mode</p>
+                        <p className="text-xs text-[var(--secondary)]">{transaction.paymentMode.replaceAll('_', ' ')}</p>
+                      </div>
+                    </div>
+                  </button>
+                  {!campaignLocksTransaction(transaction) && !transaction.savingsGoalId ? <div className="relative shrink-0">
+                    <Button variant="ghost" size="icon" className="h-11 w-9" aria-label={`Actions for ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`} aria-expanded={mobileActionsId === transaction.id} aria-haspopup="menu" onClick={() => setMobileActionsId((current) => current === transaction.id ? null : transaction.id)}><EllipsisVertical className="h-5 w-5" /></Button>
+                    {mobileActionsId === transaction.id ? <div role="menu" className="absolute right-0 top-full z-50 mt-1 flex w-48 max-w-[calc(100vw-2rem)] flex-col rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-xl">
+                      <Button role="menuitem" variant="ghost" className="min-h-11 justify-start" onClick={() => { setEditingTransaction(transaction); setMobileActionsId(null) }}><Pencil className="h-4 w-4" />Edit</Button>
+                      <Button role="menuitem" variant="ghost" className="min-h-11 justify-start text-[var(--danger)]" disabled={deleteMutation.isPending} onClick={() => { setTransactionToDelete(transaction); setMobileActionsId(null) }}><Trash2 className="h-4 w-4" />Delete</Button>
+                    </div> : null}
                   </div> : null}
                 </div>
 
+                <div className="hidden min-h-[88px] items-center gap-4 px-5 py-4 md:flex">
+                  <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${transactionIconBackground(transaction.type)} ${transactionColor(transaction.type)}`}>
+                    {isCredit(transaction.type) ? <ArrowDownLeft className="h-5 w-5" /> : transaction.type === 'TRANSFER' ? <ArrowLeftRight className="h-5 w-5" /> : <ArrowUpRight className="h-5 w-5" />}
+                  </div>
+                  <button type="button" className="flex min-w-0 flex-1 items-center justify-between gap-5 text-left" onClick={() => setViewingTransaction(transaction)} aria-label={`View ${transaction.description || transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`}>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-semibold">{transaction.description || transaction.type.replaceAll('_', ' ').toLowerCase()}</p>
+                      <div className="mt-1 flex min-w-0 items-center gap-2">
+                        <p className="truncate text-sm text-[var(--secondary)]">{categoryNames.get(transaction.categoryId) ?? 'Uncategorized'} · {formatAccountFlowDetails(transaction, accountNames)} · {transaction.paymentMode.replaceAll('_', ' ')}</p>
+                        <CampaignTransactionBadge transaction={transaction} />
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className={`text-xl font-semibold ${transactionColor(transaction.type)}`}>{isCredit(transaction.type) ? '+' : transaction.type === 'TRANSFER' ? '' : '−'}<CurrencyAmount amount={transaction.amount} minimumFractionDigits={0} /></p>
+                      <p className="mt-1 text-xs font-semibold uppercase text-[var(--secondary)]">{transaction.type.replaceAll('_', ' ')}</p>
+                    </div>
+                  </button>
+                  {!campaignLocksTransaction(transaction) && !transaction.savingsGoalId ? <div className="flex shrink-0 items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={`Edit ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`} onClick={() => setEditingTransaction(transaction)}><Pencil className="h-5 w-5" /></Button>
+                    <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={`Delete ${transaction.type.toLowerCase().replaceAll('_', ' ')} transaction`} disabled={deleteMutation.isPending} onClick={() => setTransactionToDelete(transaction)}><Trash2 className="h-5 w-5 text-[var(--danger)]" /></Button>
+                  </div> : null}
+                </div>
               </article>
             ))}
           </Card>
         </section>
       ))}
+        <PaginationControls page={transactionsQuery.data.page} totalPages={transactionsQuery.data.totalPages} total={transactionsQuery.data.total} limit={transactionsQuery.data.limit} onPageChange={setPage} />
       {transactionToDelete ? (
         <Modal open onClose={() => { if (!deleteMutation.isPending) setTransactionToDelete(null) }} title="Delete transaction?" className="sm:max-w-md">
-          <p className="text-sm leading-6 text-[var(--secondary)]">This cannot be undone. Deleting this ledger entry may affect associated account balances and repayments.</p>
+          <p className="text-sm leading-6 text-[var(--secondary)]">This hides the transaction from active totals and updates linked balances. The transaction is retained in history as a soft-deleted record.</p>
           <div className="mt-6 flex justify-end gap-3">
             <Button variant="outline" disabled={deleteMutation.isPending} onClick={() => setTransactionToDelete(null)}>Cancel</Button>
             <Button variant="danger" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(transactionToDelete.id)}>
@@ -288,6 +339,26 @@ export function TransactionsPage() {
           </div>
         </Modal>
       ) : null}
+      {viewingTransaction ? <Modal open onClose={() => setViewingTransaction(null)} title="Transaction details" className="sm:max-w-xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-4">
+          <div className="min-w-0"><p className="break-words font-semibold">{viewingTransaction.description || viewingTransaction.type.replaceAll('_', ' ').toLowerCase()}</p><p className="mt-1 text-sm text-[var(--secondary)]">{formatDate(viewingTransaction.transactionDate)}{viewingTransaction.transactionTime ? ` · ${viewingTransaction.transactionTime}` : ''}</p></div>
+          <p className={`shrink-0 text-right text-lg font-semibold ${transactionColor(viewingTransaction.type)}`}>{isCredit(viewingTransaction.type) ? '+' : viewingTransaction.type === 'TRANSFER' ? '' : '−'}<CurrencyAmount amount={viewingTransaction.amount} minimumFractionDigits={0} /><span className="mt-1 block text-[10px] font-semibold uppercase text-[var(--secondary)]">{viewingTransaction.type.replaceAll('_', ' ')}</span></p>
+        </div>
+        <dl className="mt-4 grid gap-x-4 gap-y-3 sm:grid-cols-2">
+          <div><dt className="text-xs text-[var(--secondary)]">Category</dt><dd className="mt-1 text-sm font-medium">{categoryNames.get(viewingTransaction.categoryId) ?? 'Uncategorized'}</dd></div>
+          <div><dt className="text-xs text-[var(--secondary)]">Payment mode</dt><dd className="mt-1 text-sm font-medium">{viewingTransaction.paymentMode.replaceAll('_', ' ')}</dd></div>
+          <div className="sm:col-span-2"><dt className="text-xs text-[var(--secondary)]">Account flow</dt><dd className="mt-1 text-sm font-medium">{formatAccountFlowDetails(viewingTransaction, accountNames)}</dd></div>
+          {viewingTransaction.note ? <div className="sm:col-span-2"><dt className="text-xs text-[var(--secondary)]">Note</dt><dd className="mt-1 whitespace-pre-wrap text-sm">{viewingTransaction.note}</dd></div> : null}
+          {viewingTransaction.tags.length ? <div className="sm:col-span-2"><dt className="text-xs text-[var(--secondary)]">Tags</dt><dd className="mt-1 text-sm">{viewingTransaction.tags.join(', ')}</dd></div> : null}
+          {viewingTransaction.plannedExpenseId ? <div className="sm:col-span-2"><dt className="text-xs text-[var(--secondary)]">Linked feature</dt><dd className="mt-1 text-sm">Planned expense campaign</dd></div> : null}
+          {viewingTransaction.plannedIncomeId ? <div className="sm:col-span-2"><dt className="text-xs text-[var(--secondary)]">Linked feature</dt><dd className="mt-1 text-sm">Planned income</dd></div> : null}
+          {viewingTransaction.savingsGoalId ? <div className="sm:col-span-2"><dt className="text-xs text-[var(--secondary)]">Linked feature</dt><dd className="mt-1 text-sm">Savings goal · {viewingTransaction.savingsMovementDirection?.toLowerCase()}</dd></div> : null}
+        </dl>
+        <div className="mt-6 flex justify-end gap-2">
+          {!campaignLocksTransaction(viewingTransaction) && !viewingTransaction.savingsGoalId && !viewingTransaction.plannedIncomeId ? <Button variant="outline" onClick={() => { setEditingTransaction(viewingTransaction); setViewingTransaction(null) }}><Pencil className="h-4 w-4" />Edit transaction</Button> : null}
+          <Button onClick={() => setViewingTransaction(null)}>Close</Button>
+        </div>
+      </Modal> : null}
       {addOpen || editingTransaction ? <TransactionFormModal transaction={editingTransaction ?? undefined} onClose={() => { closeAddModal(); setEditingTransaction(null) }} /> : null}
     </div>
   )
